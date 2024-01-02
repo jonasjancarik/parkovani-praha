@@ -54,16 +54,12 @@ filename_templates = [
 
 if not INCLUDE_QUARTERLY:
     filename_templates = [
-        filename
-        for filename in filename_templates
-        if not '_Q' in filename
+        filename for filename in filename_templates if not "_Q" in filename
     ]
 
 if not INCLUDE_SECTIONS:
     filename_templates = [
-        filename
-        for filename in filename_templates
-        if not 'J.json' in filename
+        filename for filename in filename_templates if not "J.json" in filename
     ]
 
 url_template = "https://zps.tsk-praha.cz/puzzle/genmaps/DISTRICT/FILENAME"
@@ -71,8 +67,17 @@ url_template = "https://zps.tsk-praha.cz/puzzle/genmaps/DISTRICT/FILENAME"
 if not os.path.exists("data"):
     os.makedirs("data/downloaded")
 
-total_files = len(districts) * len(filename_templates) * ( END_MONTH - START_MONTH + 1 ) * len(YEARS)
-counter = 0
+# load list of files to skip from data/skip.txt
+skip = []
+if os.path.exists("data/skip.txt"):
+    with open("data/skip.txt", "r", encoding="utf-8") as f:
+        skip = f.read().splitlines()
+
+# get list of already downloaded files
+downloaded_files = os.listdir("data/downloaded")
+
+# generate list of filenames
+filenames = []
 
 for district_index, district in enumerate(districts):
     for filename_index, filename in enumerate(filename_templates):
@@ -81,20 +86,30 @@ for district_index, district in enumerate(districts):
                 filename = filename.replace("YYYY", str(year)).replace(
                     "MM", str(month).zfill(2)
                 )
-                url = url_template.replace("DISTRICT", district).replace(
-                    "FILENAME", filename
-                )
-                r = requests.get(url, auth=(USER, PASSWORD))
-                # check response status code
-                if r.status_code != 200:
-                    print(f"Error while downloading {district}-{filename}")
-                    continue
-                with open(
-                    f"./data/downloaded/{district}-{filename}.json",
-                    "w",
-                    encoding="utf-8",
-                ) as f:
-                    f.write(r.text)
+                filename_complete = f"{district}-{filename}"
+                if not filename_complete in skip and not filename_complete in downloaded_files:
+                    filenames.append(filename_complete)
 
-                counter += 1
-                print(f"Progress: {counter}/{total_files}")
+total_files = len(filenames)
+
+for counter, filename in enumerate(filenames):
+    district = filename.split("-")[0]
+    filename_server = filename.split("-")[1]
+    url = url_template.replace("DISTRICT", district).replace("FILENAME", filename_server)
+    r = requests.get(url, auth=(USER, PASSWORD), timeout=60)
+    counter += 1
+    # check response status code
+    if r.status_code != 200:
+        print(f"Error while downloading {district}-{filename}")
+        # add to skip list
+        skip.append(f"{filename}")
+        # save skip list
+        with open("data/skip.txt", "w", encoding="utf-8") as f:
+            f.write("\n".join(skip))
+        continue
+    with open(f"data/downloaded/{filename}", "w", encoding="utf-8") as f:
+        f.write(r.text)
+
+    print(f"Progress: {counter}/{total_files}")
+
+print("Done")
