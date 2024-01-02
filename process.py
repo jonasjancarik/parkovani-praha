@@ -5,6 +5,9 @@ import json
 # load list of files from data/downloaded
 files = os.listdir("data/downloaded")
 
+# remove files ending with A.json
+files = [file for file in files if not file.endswith("A.json")]  # todo: make work with section data (úseky)
+
 # create empty dataframe
 df = pa.DataFrame()
 
@@ -64,8 +67,16 @@ for file in files:
         df2["část dne"] = "den"
     elif "N_" in file:
         df2["část dne"] = "noc"
+    elif "P_" in file:
+        df2["část dne"] = "Po-Pá (MPD)"
+    elif "S_" in file:
+        df2["část dne"] = "So-Ne (MPD)"
+    elif "W_" in file:
+        df2["část dne"] = "Po-Pá"
+    elif "X_" in file:
+        df2["část dne"] = "So-Ne"
     else:
-        raise ValueError("File name does not contain D_ or N_")
+        raise ValueError("File name does not contain a known time period")
 
     # add column with district
     df2["mestska_cast"] = file.split("-")[0]  # split by "-" and take first part
