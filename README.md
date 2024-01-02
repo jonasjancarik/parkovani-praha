@@ -1,6 +1,25 @@
 # parkovani-praha
 
-## Co znamenají názvy souborů?
+# Použití
+
+## Instalace
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Stažení dat
+
+- přepiš ve skriptu download.py konfigurační konstanty (zda stahovat úseky nebo ZSJ, rok, měsíc, typ souboru...)
+- `download.py` stáhne potřebné soubory do složky `data/downloaded/`
+
+## Analýza dat
+
+- `analyze.py` zpracuje soubory a vytvoří výstupní soubor `data/processed/data.csv`
+
+# Co znamenají názvy souborů?
 
 ### JS a JSON soubory
 
