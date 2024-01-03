@@ -6,7 +6,9 @@ import json
 files = os.listdir("data/downloaded")
 
 # remove files ending with A.json
-files = [file for file in files if not file.endswith("A.json")]  # todo: make work with section data (úseky)
+files = [
+    file for file in files if not file.endswith("A.json")
+]  # todo: make work with section data (úseky)
 
 # create empty dataframe
 df = pa.DataFrame()
@@ -136,15 +138,20 @@ df["soucet_vsech_typu"] = (
 )
 
 # divide percentage values by 100
-percent_columns = list(set(df.columns) - set([
-    "filename",
-    "mestska_cast",
-    "část dne",
-    "kod_zsj",
-    "nazev_zsj",
-    "parkovacich_mist_celkem",
-    "parkovacich_mist_v_zps"]
-))
+percent_columns = list(
+    set(df.columns)
+    - set(
+        [
+            "filename",
+            "mestska_cast",
+            "část dne",
+            "kod_zsj",
+            "nazev_zsj",
+            "parkovacich_mist_celkem",
+            "parkovacich_mist_v_zps",
+        ]
+    )
+)
 
 df[percent_columns] = df[percent_columns] / 100
 

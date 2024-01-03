@@ -54,12 +54,12 @@ filename_templates = [
 
 if not INCLUDE_QUARTERLY:
     filename_templates = [
-        filename for filename in filename_templates if not "_Q" in filename
+        filename for filename in filename_templates if "_Q" not in filename
     ]
 
 if not INCLUDE_SECTIONS:
     filename_templates = [
-        filename for filename in filename_templates if not "J.json" in filename
+        filename for filename in filename_templates if "J.json" not in filename
     ]
 
 url_template = "https://zps.tsk-praha.cz/puzzle/genmaps/DISTRICT/FILENAME"
@@ -87,7 +87,10 @@ for district_index, district in enumerate(districts):
                     "MM", str(month).zfill(2)
                 )
                 filename_complete = f"{district}-{filename}"
-                if not filename_complete in skip and not filename_complete in downloaded_files:
+                if (
+                    filename_complete not in skip
+                    and filename_complete not in downloaded_files
+                ):
                     filenames.append(filename_complete)
 
 total_files = len(filenames)
@@ -95,7 +98,9 @@ total_files = len(filenames)
 for counter, filename in enumerate(filenames):
     district = filename.split("-")[0]
     filename_server = filename.split("-")[1]
-    url = url_template.replace("DISTRICT", district).replace("FILENAME", filename_server)
+    url = url_template.replace("DISTRICT", district).replace(
+        "FILENAME", filename_server
+    )
     r = requests.get(url, auth=(USER, PASSWORD), timeout=60)
     counter += 1
     # check response status code
