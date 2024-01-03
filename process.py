@@ -1,97 +1,83 @@
 import os
-import pandas as pa
+import pandas as pd
 import json
 
-# load list of files from data/downloaded
-files = os.listdir("data/downloaded")
 
-# remove files ending with A.json
-files = [
-    file for file in files if not file.endswith("A.json")
-]  # todo: make work with section data (úseky)
-
-# create empty dataframe
-df = pa.DataFrame()
-
-# iterate over files
-for file in files:
-    # read json file
-    with open(f"data/downloaded/{file}", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-        except json.decoder.JSONDecodeError:
-            print(f"Error while reading {file} (potentially missing data)")
-            continue
-
-    areas = []  # area = ZSJ = základní sídelní jednotka
-
+def process_json_data(data):
+    areas = []
     for feature in data["features"]:
-        area = {}
-        for key, value in feature["properties"].items():
-            area[key] = value
+        area = {
+            key: value
+            for key, value in feature["properties"].items()
+            if key
+            not in [
+                "GraphData",
+                "GraphLegend",
+                "GraphData2",
+                "GraphLegend2",
+                "fill",
+                "stroke",
+                "stroke-width",
+                "opacity",
+                "r",
+            ]
+        }
 
-        # remove GraphData, GraphLegend, GraphData2, GraphLegend2 - these will be transforemed to separate fields
-        for key in ["GraphData", "GraphLegend", "GraphData2", "GraphLegend2"]:
-            area.pop(key)
-
-        # remove unnecessary fields - fill, stroke, stroke-width, opacity, r
-        for key in ["fill", "stroke", "stroke-width", "opacity", "r"]:
-            area.pop(key)
-
-        # parse GraphData and GraphLegend - these are lists of values
-        for key in ["GraphData", "GraphLegend", "GraphData2", "GraphLegend2"]:
-            feature["properties"][key] = (
-                feature["properties"][key].replace("[", "").replace("]", "").split(",")
-            )
-
-        nan_detected = False
-
-        for label_suffix in ["", "2"]:
-            for i, datapoint in enumerate(
-                feature["properties"][f"GraphData{label_suffix}"]
-            ):
-                try:
-                    area[feature["properties"][f"GraphLegend{label_suffix}"][i]] = int(
-                        datapoint
-                    )
-                except ValueError:
-                    if datapoint == "NaN":
-                        # NaN means no data - likely due to parking area not in operation. We will skip this area.
-                        nan_detected = True
-
-        if not nan_detected:
+        area = parse_graph_data(feature, area)
+        if not any(area[key] == "NaN" for key in area):
             areas.append(area)
+        else:
+            print(f"Skipping area {area['NAZ_ZSJ']} due to missing data")
+    return areas
 
-    # create dataframe from list of areas
-    df2 = pa.DataFrame(areas)
-    # add column to distinguish day or night - day has "D_" in filename, night has "N_"
-    if "D_" in file:
-        df2["část dne"] = "den"
-    elif "N_" in file:
-        df2["část dne"] = "noc"
-    elif "P_" in file:
-        df2["část dne"] = "Po-Pá (MPD)"
-    elif "S_" in file:
-        df2["část dne"] = "So-Ne (MPD)"
-    elif "W_" in file:
-        df2["část dne"] = "Po-Pá"
-    elif "X_" in file:
-        df2["část dne"] = "So-Ne"
-    else:
-        raise ValueError("File name does not contain a known time period")
 
-    # add column with district
-    df2["mestska_cast"] = file.split("-")[0]  # split by "-" and take first part
+def parse_graph_data(feature, area):
+    updated_area = area.copy()
+    for label_suffix in ["", "2"]:
+        graph_data_key = f"GraphData{label_suffix}"
+        graph_legend_key = f"GraphLegend{label_suffix}"
+        graph_data = (
+            feature["properties"]
+            .get(graph_data_key, "")
+            .replace("[", "")
+            .replace("]", "")
+            .split(",")
+        )
+        graph_legend = (
+            feature["properties"]
+            .get(graph_legend_key, "")
+            .replace("[", "")
+            .replace("]", "")
+            .split(",")
+        )
 
-    # add column with filename
-    df2["filename"] = file
+        for i, datapoint in enumerate(graph_data):
+            try:
+                updated_area[graph_legend[i]] = int(datapoint)
+            except ValueError:
+                updated_area[graph_legend[i]] = datapoint
+    return updated_area
 
-    # add to main dataframe
-    df = pa.concat([df, df2], ignore_index=True)
 
-# rename columns
-df = df.rename(
-    columns={
+def enrich_dataframe(df, file):
+    time_period = {
+        "D_": "den",
+        "N_": "noc",
+        "P_": "Po-Pá (MPD)",
+        "S_": "So-Ne (MPD)",
+        "W_": "Po-Pá",
+        "X_": "So-Ne",
+    }
+    df["část dne"] = next(
+        (time_period[key] for key in time_period if key in file), "Unknown"
+    )
+    df["mestska_cast"] = file.split("-")[0]
+    df["filename"] = file
+    return df
+
+
+def rename_and_calculate_columns(df):
+    new_column_names = {
         "KOD_ZSJ": "kod_zsj",
         "NAZ_ZSJ": "nazev_zsj",
         "Obyv_total": "obyvatel",
@@ -116,51 +102,81 @@ df = df.rename(
         "Obs": "obsazenost",
         "ResPct": "rezidenti_do_500m",
     }
-)
+    df.rename(columns=new_column_names, inplace=True)
 
-# calculate navstevnici: navstevnici_platici + navstevnici_neplatici
-df["navstevnici"] = (
-    df["navstevnici_platici"] + df["navstevnici_neplatici"] + df["prenosna"]
-)
-
-# calculate kontrola - RT_R + RT_V + RT_A + RT_P + RT_C + RT_E + RT_O + RT_S + R_VIS + NR + Free
-df["soucet_vsech_typu"] = (
-    df["rezidentska"]
-    + df["vlastnicka"]
-    + df["abonentska"]
-    + df["prenosna"]
-    + df["carsharing"]
-    + df["ekologicka"]
-    + df["ostatni"]
-    + df["socialni"]
-    + df["navstevnici"]
-    + df["volna_mista"]
-)
-
-# divide percentage values by 100
-percent_columns = list(
-    set(df.columns)
-    - set(
-        [
-            "filename",
-            "mestska_cast",
-            "část dne",
-            "kod_zsj",
-            "nazev_zsj",
-            "parkovacich_mist_celkem",
-            "parkovacich_mist_v_zps",
-        ]
+    # calculate navstevnici: navstevnici_platici + navstevnici_neplatici
+    df["navstevnici"] = (
+        df["navstevnici_platici"] + df["navstevnici_neplatici"] + df["prenosna"]
     )
-)
 
-df[percent_columns] = df[percent_columns] / 100
+    # calculate kontrola - RT_R + RT_V + RT_A + RT_P + RT_C + RT_E + RT_O + RT_S + R_VIS + NR + Free
+    df["soucet_vsech_typu"] = (
+        df["rezidentska"]
+        + df["vlastnicka"]
+        + df["abonentska"]
+        + df["prenosna"]
+        + df["carsharing"]
+        + df["ekologicka"]
+        + df["ostatni"]
+        + df["socialni"]
+        + df["navstevnici"]
+        + df["volna_mista"]
+    )
 
-# create data/processed if it does not exist
-if not os.path.exists("data/processed"):
-    os.makedirs("data/processed")
+    # divide percentage values by 100
+    percent_columns = list(
+        set(df.columns)
+        - set(
+            [
+                "filename",
+                "mestska_cast",
+                "část dne",
+                "kod_zsj",
+                "nazev_zsj",
+                "parkovacich_mist_celkem",
+                "parkovacich_mist_v_zps",
+            ]
+        )
+    )
 
-# save to csv
-print("Saving to data/processed/data.csv...")
-df.to_csv("data/processed/data.csv", index=False, encoding="utf-8")
+    df[percent_columns] = df[percent_columns] / 100
 
-print("Done.")
+    return df
+
+
+def save_to_csv(df, processed_dir):
+    if not os.path.exists(processed_dir):
+        os.makedirs(processed_dir)
+    output_file = os.path.join(processed_dir, "data.csv")
+    df.to_csv(output_file, index=False, encoding="utf-8")
+    print("Data saved to:", output_file)
+
+
+# Main Script
+
+# Directory paths
+data_dir = "data/downloaded"
+processed_dir = "data/processed"
+
+# File filtering and processing
+files = [
+    file for file in os.listdir(data_dir) if file.endswith(".json") and "A" not in file
+]  # todo: make work with A files (data for sections - úseky)
+df = pd.DataFrame()
+
+for file in files:
+    file_path = os.path.join(data_dir, file)
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except json.decoder.JSONDecodeError:
+        print(f"Error while reading {file} (potentially missing data)")
+        continue
+
+    areas = process_json_data(data)
+    df2 = pd.DataFrame(areas)
+    df2 = enrich_dataframe(df2, file)
+    df = pd.concat([df, df2], ignore_index=True)
+
+df = rename_and_calculate_columns(df)
+save_to_csv(df, processed_dir)
