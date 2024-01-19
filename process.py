@@ -3,7 +3,7 @@ import pandas as pd
 import json
 import sys
 
-TYPE_OF_DATA = "PARKED_CARS"  # one of PARKED_CARS, PARKING_PERMITS, PARKING_SPACES
+TYPE_OF_DATA = "PARKING_PERMITS"  # one of PARKED_CARS, PARKING_PERMITS, PARKING_SPACES
 
 if TYPE_OF_DATA == "PARKED_CARS":
 
@@ -266,3 +266,84 @@ if TYPE_OF_DATA == "PARKED_CARS":
 
     df = rename_and_calculate_columns(df)
     save_to_csv(df, processed_dir)
+
+elif TYPE_OF_DATA == "PARKING_PERMITS":
+    print("Processing parking permit data...")
+
+    # get list of files in data/downloaded/permits
+
+    try:
+        files = os.listdir("data/downloaded/permits")
+    except FileNotFoundError:
+        print("No files found in data/downloaded/permits")
+        sys.exit(0)
+
+    # merge all files into one dataframe
+    df = pd.DataFrame()
+    for file in files:
+        file_path = os.path.join("data/downloaded/permits", file)
+        df2 = pd.read_csv(file_path, encoding="utf-8", delimiter="\t")
+        df = pd.concat([df, df2], ignore_index=True)
+
+    # now drop rows where Oblast == 'Enum'
+    df = df[df["Oblast"] != "Enum"]
+
+    # # remove zeros from Oblast numbers, so e.g. P01 should become P1 or P01.01 should become P1.1. Regex should be used so that only zeros before digits are removed, so that we don't turn P10 to P1
+    # df["Oblast"] = df["Oblast"].str.replace(r"0+(?=\d)", "", regex=True)
+
+    # add leading zeros to Oblast numbers, so e.g. P1 should become P01 or P5 should become P05. But P05 shouldn't become P005. And only in the parts before dots. Regex should be used
+    df["Oblast"] = df["Oblast"].str.replace(r"(?<=\bP)\d(?!\d)", "0\\g<0>", regex=True)
+
+    # identify Oblast values that contain dots - those are subdistricts
+    subdistricts = df[df["Oblast"].str.contains("\.")]["Oblast"].unique()
+
+    # identify districts with subdistricts - this means removing the parts after the dot
+    districts_with_subdistricts = {
+        subdistrict_name.split(".")[0] for subdistrict_name in subdistricts
+    }
+
+    # in the df, append .0 to the Oblast values that are districts with subdistricts
+    df.loc[df["Oblast"].isin(districts_with_subdistricts), "Oblast"] = (
+        df.loc[df["Oblast"].isin(districts_with_subdistricts), "Oblast"] + ".0"
+    )
+
+    # now extract the year and month from the season column and create a new column with the date. The last six characters of the season column are the year and month, e.g. 201910; make it the first of the month
+    df["date"] = pd.to_datetime(df["Season"].str[-6:] + "01")
+
+    # create a new column "parent district" - only do this for rows where Oblast contains a dot
+    df["parent district"] = df["Oblast"].apply(
+        lambda x: x.split(".")[0] if "." in x else None
+    )
+
+    # now for all Oblast values that contain dots, sum the values for the subdistricts of the same district to a new row which where Oblast will be the main district code (i.e. without the dot part). This should be done for each date
+
+    # now, for each date and parent district group, sum the values and create a new row which where Oblast will be the parent district value
+    df_grouped = df.groupby(["date", "parent district"]).sum().reset_index()
+
+    # Replace the Oblast values in df_grouped with the parent district values
+    df_grouped["Oblast"] = df_grouped["parent district"]
+
+    # Set the parent district column to Null in df_grouped
+    df_grouped["parent district"] = None
+
+    # Append df_grouped back to df
+    df_final = pd.concat([df, df_grouped], ignore_index=True)
+
+    # sort by date and oblast
+    df_final.sort_values(["date", "Oblast"], inplace=True)
+
+    # drop teh season column
+    df_final.drop(columns=["Season"], inplace=True)
+
+    # reorder the columns so that date is first
+    columns = df_final.columns.tolist()
+
+    # move date to the beginning
+    columns.insert(0, columns.pop(columns.index("date")))
+
+    df_final = df_final[columns]
+
+    # save to csv
+    df_final.to_csv("data/processed/data_parking_permits.csv", index=False)
+
+    print('Data saved to "data/processed/data_parking_permits.csv"')
