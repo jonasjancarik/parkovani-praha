@@ -7,7 +7,7 @@ load_dotenv()
 USER = os.getenv("TSK_USERNAME")
 PASSWORD = os.getenv("TSK_PASSWORD")
 
-TYPE_OF_DATA = "PARKING_PERMITS"  # one of PARKED_CARS, PARKING_PERMITS, PARKING_SPACES
+TYPE_OF_DATA = "PARKING_SPACES"  # one of PARKED_CARS, PARKING_PERMITS, PARKING_SPACES
 
 YEARS = [2023]
 START_MONTH = 11
@@ -171,6 +171,61 @@ elif TYPE_OF_DATA == "PARKING_PERMITS":
             continue
 
         with open(f"data/downloaded/permits/{filename}", "w", encoding="utf-8") as f:
+            f.write(r.text)
+
+        print(f"Progress: {counter}/{len(filenames)}", end="\r")
+
+    print("\nDone")
+
+
+if TYPE_OF_DATA == "PARKING_SPACES":
+    # the URLs look like this: https://zps.tsk-praha.cz/geodata/stats/PM/P00-202401PM2.tsv
+    # let's cycle through the years and months and download the data
+    # the data is in the form of a tab-separated file
+
+    # create directory if it does not exist
+    if not os.path.exists("data/downloaded/spaces"):
+        os.makedirs("data/downloaded/spaces")
+        downloaded_files = []
+    else:
+        # get list of already downloaded files
+        downloaded_files = os.listdir("data/downloaded/spaces")
+
+    # generate list of filenames
+    filenames = []
+
+    filename_template = "P00-YYYYMMPM2.tsv"
+
+    START_YEAR = 2018
+    START_MONTH = 1
+    current_year = datetime.datetime.now().year
+    current_month = datetime.datetime.now().month
+
+    # loop through months and years until we reach current month
+    for year in range(START_YEAR, current_year + 1):
+        for month in range(1, 13):
+            if year == START_YEAR and month < int(START_MONTH):
+                continue
+            if year == current_year and month > current_month:
+                continue
+            filename = filename_template.replace("YYYY", str(year)).replace(
+                "MM", str(month).zfill(2)
+            )
+            if filename not in downloaded_files:
+                filenames.append(filename)
+
+    print(f"Downloading {len(filenames)} files")
+
+    for counter, filename in enumerate(filenames):
+        url = "https://zps.tsk-praha.cz/geodata/stats/PM/" + filename
+        r = requests.get(url, auth=(USER, PASSWORD), timeout=60)
+        counter += 1
+        # check response status code
+        if r.status_code != 200:
+            print(f"Error while downloading {filename}")
+            continue
+
+        with open(f"data/downloaded/spaces/{filename}", "w", encoding="utf-8") as f:
             f.write(r.text)
 
         print(f"Progress: {counter}/{len(filenames)}", end="\r")
