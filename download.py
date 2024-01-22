@@ -68,8 +68,8 @@ if TYPE_OF_DATA == "PARKED_CARS":
 
     url_template = "https://zps.tsk-praha.cz/puzzle/genmaps/DISTRICT/FILENAME"
 
-    if not os.path.exists("data"):
-        os.makedirs("data/downloaded")
+    if not os.path.exists("data/downloaded/parked_cars"):
+        os.makedirs("data/downloaded/parked_cars")
 
     # load list of files to skip from data/skip.txt
     skip = []
@@ -78,7 +78,7 @@ if TYPE_OF_DATA == "PARKED_CARS":
             skip = f.read().splitlines()
 
     # get list of already downloaded files
-    downloaded_files = os.listdir("data/downloaded")
+    downloaded_files = os.listdir("data/downloaded/parked_cars")
 
     # generate list of filenames
     filenames = []
@@ -116,7 +116,9 @@ if TYPE_OF_DATA == "PARKED_CARS":
             with open("data/skip.txt", "w", encoding="utf-8") as f:
                 f.write("\n".join(skip))
             continue
-        with open(f"data/downloaded/{filename}", "w", encoding="utf-8") as f:
+        with open(
+            f"data/downloaded/parked_cars/{filename}", "w", encoding="utf-8"
+        ) as f:
             f.write(r.text)
 
         print(f"Progress: {counter}/{total_files}")

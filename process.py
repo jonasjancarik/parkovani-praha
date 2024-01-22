@@ -253,7 +253,7 @@ def proces_parked_cars():
     # Main Script
 
     # Directory paths
-    data_dir = "data/downloaded"
+    data_dir = "data/downloaded/parked_cars"
     processed_dir = "data/processed"
     # create processed directory if it does not exist
     if not os.path.exists(processed_dir):
