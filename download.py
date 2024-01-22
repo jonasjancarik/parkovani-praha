@@ -84,10 +84,10 @@ if TYPE_OF_DATA == "PARKED_CARS":
     filenames = []
 
     for district_index, district in enumerate(districts):
-        for filename_index, filename in enumerate(filename_templates):
+        for filename_index, filename_template in enumerate(filename_templates):
             for year in YEARS:
                 for month in range(START_MONTH, END_MONTH + 1):
-                    filename = filename.replace("YYYY", str(year)).replace(
+                    filename = filename_template.replace("YYYY", str(year)).replace(
                         "MM", str(month).zfill(2)
                     )
                     filename_complete = f"{district}-{filename}"
