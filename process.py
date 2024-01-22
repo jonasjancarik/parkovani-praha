@@ -3,10 +3,39 @@ import pandas as pd
 import json
 import sys
 
-TYPE_OF_DATA = "PARKING_PERMITS"  # one of PARKED_CARS, PARKING_PERMITS, PARKING_SPACES
+TYPE_OF_DATA = "SPACES"  # one of PARKED_CARS, PERMITS, SPACES
 
-if TYPE_OF_DATA == "PARKED_CARS":
 
+def load_files_to_df(category):
+    """
+    Load TSV files from the specified category directory and merge them into a single dataframe.
+
+    Parameters:
+    category (str): The category directory name.
+
+    Returns:
+    pandas.DataFrame: The merged dataframe containing data from all files.
+    """
+
+    # get list of files in data/downloaded/permits
+
+    try:
+        files = os.listdir(f"data/downloaded/{category}")
+    except FileNotFoundError:
+        print(f"No files found in data/downloaded/{category}")
+        sys.exit(0)
+
+    # merge all files into one dataframe
+    df = pd.DataFrame()
+    for file in files:
+        file_path = os.path.join(f"data/downloaded/{category}", file)
+        df2 = pd.read_csv(file_path, encoding="utf-8", delimiter="\t")
+        df = pd.concat([df, df2], ignore_index=True)
+
+    return df
+
+
+def proces_parked_cars():
     def process_json_data(data):
         areas = []
         for feature in data["features"]:
@@ -267,23 +296,11 @@ if TYPE_OF_DATA == "PARKED_CARS":
     df = rename_and_calculate_columns(df)
     save_to_csv(df, processed_dir)
 
-elif TYPE_OF_DATA == "PARKING_PERMITS":
+
+def process_permits():
     print("Processing parking permit data...")
 
-    # get list of files in data/downloaded/permits
-
-    try:
-        files = os.listdir("data/downloaded/permits")
-    except FileNotFoundError:
-        print("No files found in data/downloaded/permits")
-        sys.exit(0)
-
-    # merge all files into one dataframe
-    df = pd.DataFrame()
-    for file in files:
-        file_path = os.path.join("data/downloaded/permits", file)
-        df2 = pd.read_csv(file_path, encoding="utf-8", delimiter="\t")
-        df = pd.concat([df, df2], ignore_index=True)
+    df = load_files_to_df("permits")
 
     # now drop rows where Oblast == 'Enum'
     df = df[df["Oblast"] != "Enum"]
@@ -347,3 +364,26 @@ elif TYPE_OF_DATA == "PARKING_PERMITS":
     df_final.to_csv("data/processed/data_parking_permits.csv", index=False)
 
     print('Data saved to "data/processed/data_parking_permits.csv"')
+
+
+def process_spaces():
+    print("Processing parking spaces data...")
+
+    df = load_files_to_df("spaces")
+
+    # turn Season into date. Season is YYYYMM, so add 01 to the end to make it YYYYMMDD and then convert to date
+    df["date"] = pd.to_datetime(df["Season"].astype(str) + "01")
+
+    # drop the Season column
+    df.drop(columns=["Season"], inplace=True)
+
+    # save to csv
+    df.to_csv("data/processed/data_parking_spaces.csv", index=False)
+
+
+if TYPE_OF_DATA == "PARKED_CARS":
+    proces_parked_cars()
+elif TYPE_OF_DATA == "PERMITS":
+    process_permits()
+elif TYPE_OF_DATA == "SPACES":
+    process_spaces()
