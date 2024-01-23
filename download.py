@@ -7,11 +7,11 @@ load_dotenv()
 USER = os.getenv("TSK_USERNAME")
 PASSWORD = os.getenv("TSK_PASSWORD")
 
-TYPE_OF_DATA = "PARKING_SPACES"  # one of PARKED_CARS, PARKING_PERMITS, PARKING_SPACES
+TYPE_OF_DATA = "PARKING"  # one of PARKING, PARKING_PERMITS, PARKING_SPACES
 
-YEARS = [2023]
-START_MONTH = 11
-END_MONTH = 11
+YEARS = [2018, 2019, 2020, 2021, 2022, 2023]
+START_MONTH = 1
+END_MONTH = 12
 INCLUDE_QUARTERLY = False
 INCLUDE_SECTIONS = False  # úseky
 
@@ -32,7 +32,14 @@ districts = [
     "P22",
 ]
 
-if TYPE_OF_DATA == "PARKED_CARS":
+
+def session_setup(session):
+    session.auth = (USER, PASSWORD)
+    session.timeout = 60
+    return session
+
+
+if TYPE_OF_DATA == "PARKING":
     filename_templates = [
         "OB_YYYYMMD_NA.json",
         "OB_YYYYMMD_NJ.json",
@@ -63,7 +70,7 @@ if TYPE_OF_DATA == "PARKED_CARS":
 
     if not INCLUDE_SECTIONS:
         filename_templates = [
-            filename for filename in filename_templates if "J.json" not in filename
+            filename for filename in filename_templates if "A.json" not in filename
         ]
 
     url_template = "https://zps.tsk-praha.cz/puzzle/genmaps/DISTRICT/FILENAME"
@@ -99,29 +106,36 @@ if TYPE_OF_DATA == "PARKED_CARS":
 
     total_files = len(filenames)
 
-    for counter, filename in enumerate(filenames):
-        district = filename.split("-")[0]
-        filename_server = filename.split("-")[1]
-        url = url_template.replace("DISTRICT", district).replace(
-            "FILENAME", filename_server
-        )
-        r = requests.get(url, auth=(USER, PASSWORD), timeout=60)
-        counter += 1
-        # check response status code
-        if r.status_code != 200:
-            print(f"Error while downloading {district}-{filename}")
-            # add to skip list
-            skip.append(f"{filename}")
-            # save skip list
-            with open("data/skip.txt", "w", encoding="utf-8") as f:
-                f.write("\n".join(skip))
-            continue
-        with open(
-            f"data/downloaded/parked_cars/{filename}", "w", encoding="utf-8"
-        ) as f:
-            f.write(r.text)
+    # create a session
+    with requests.Session() as s:
+        s = session_setup(s)
 
-        print(f"Progress: {counter}/{total_files}")
+        for counter, filename in enumerate(filenames):
+            district = filename.split("-")[0]
+            filename_server = filename.split("-")[1]
+            url = url_template.replace("DISTRICT", district).replace(
+                "FILENAME", filename_server
+            )
+            counter += 1
+            # make a head request to check if the file exists
+            r = s.head(url)
+            # check response status code
+            if r.status_code != 200:
+                print(f"Error while downloading {filename}")
+                # add to skip list
+                skip.append(f"{filename}")
+                # save skip list
+                with open("data/skip.txt", "w", encoding="utf-8") as f:
+                    f.write("\n".join(skip))
+                continue
+            else:
+                r = s.get(url)
+            with open(
+                f"data/downloaded/parked_cars/{filename}", "w", encoding="utf-8"
+            ) as f:
+                f.write(r.text)
+
+            print(f"Progress: {counter}/{total_files}")
 
     print("Done")
 
@@ -163,19 +177,26 @@ elif TYPE_OF_DATA == "PARKING_PERMITS":
 
     print(f"Downloading {len(filenames)} files")
 
-    for counter, filename in enumerate(filenames):
-        url = index_url + filename
-        r = requests.get(url, auth=(USER, PASSWORD), timeout=60)
-        counter += 1
-        # check response status code
-        if r.status_code != 200:
-            print(f"Error while downloading {filename}")
-            continue
+    with requests.Session() as s:
+        s = session_setup(s)
 
-        with open(f"data/downloaded/permits/{filename}", "w", encoding="utf-8") as f:
-            f.write(r.text)
+        for counter, filename in enumerate(filenames):
+            url = index_url + filename
+            counter += 1
+            r = s.head(url)
+            # check response status code
+            if r.status_code != 200:
+                print(f"Error while downloading {filename}")
+                continue
+            else:
+                r = s.get(url)
 
-        print(f"Progress: {counter}/{len(filenames)}", end="\r")
+            with open(
+                f"data/downloaded/permits/{filename}", "w", encoding="utf-8"
+            ) as f:
+                f.write(r.text)
+
+            print(f"Progress: {counter}/{len(filenames)}", end="\r")
 
     print("\nDone")
 
@@ -218,18 +239,23 @@ if TYPE_OF_DATA == "PARKING_SPACES":
 
     print(f"Downloading {len(filenames)} files")
 
-    for counter, filename in enumerate(filenames):
-        url = "https://zps.tsk-praha.cz/geodata/stats/PM/" + filename
-        r = requests.get(url, auth=(USER, PASSWORD), timeout=60)
-        counter += 1
-        # check response status code
-        if r.status_code != 200:
-            print(f"Error while downloading {filename}")
-            continue
+    with requests.Session() as s:
+        s = session_setup(s)
 
-        with open(f"data/downloaded/spaces/{filename}", "w", encoding="utf-8") as f:
-            f.write(r.text)
+        for counter, filename in enumerate(filenames):
+            url = "https://zps.tsk-praha.cz/geodata/stats/PM/" + filename
+            counter += 1
+            r = s.head(url)
+            # check response status code
+            if r.status_code != 200:
+                print(f"Error while downloading {filename}")
+                continue
+            else:
+                r = s.get(url)
 
-        print(f"Progress: {counter}/{len(filenames)}", end="\r")
+            with open(f"data/downloaded/spaces/{filename}", "w", encoding="utf-8") as f:
+                f.write(r.text)
+
+            print(f"Progress: {counter}/{len(filenames)}", end="\r")
 
     print("\nDone")
