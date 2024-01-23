@@ -1,0 +1,3 @@
+{"type":"FeatureCollection", "features": [
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[14.4005661206938,50.1005614567992],[14.4008203847419,50.1006030395802],[14.4014313227408,50.1005000480829],[14.4015414105188,50.1004482029206],[14.4012849765562,50.1003403418349],[14.4008088621387,50.1003770531273],[14.4005661206938,50.1005614567992]]]},"properties":{"CODE":"P6-1186","CATEGORY":"VIS","CELKEM_PS":5,"PS_ZPS":5,"Resp":83,"Obs":60,"GraphData":"[39,2,0,7,1,10,40]","GraphLegend":"[R1,R2,R3,R4,VI,NR,FR]","GraphData2":"[38,0,2,0,0,0,0,8,1,10,40]","GraphLegend2":"[R,V,A,P,C,E,O,S,VI,NR,FR]","fill":"#ffffd4","stroke":"#000000","stroke-width":0,"opacity":0.7,"r":10}}
+]}
