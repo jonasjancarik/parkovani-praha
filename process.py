@@ -3,7 +3,41 @@ import pandas as pd
 import json
 import sys
 
-TYPE_OF_DATA = "SPACES"  # one of PARKED_CARS, PERMITS, SPACES
+# read TYPE_OF_DATA from command line
+# if no argument is provided, default to ALL
+if len(sys.argv) > 1:
+    # allow displaying help
+    if sys.argv[1].lower() == "-h" or sys.argv[1].lower() == "--help":
+        print(
+            "Usage: python process.py [TYPE_OF_DATA]\n\nTYPE_OF_DATA can be one of the following:\nPARKING\nPERMITS\nSPACES\nPERMITS_SPACES\nALL (default)"
+        )
+        sys.exit(0)
+    TYPE_OF_DATA = sys.argv[1].upper()
+    if TYPE_OF_DATA not in [
+        "PARKING",
+        "PERMITS",
+        "SPACES",
+        "PERMITS_SPACES",
+        "ALL",
+    ]:
+        print(
+            "Invalid argument. TYPE_OF_DATA can be one of the following:\nPARKING\nPERMITS\nSPACES\nPERMITS_SPACES\nALL (default)"
+        )
+        sys.exit(0)
+
+    # if there is a second argument, it should be either zsj (default) or useky
+    AREA_TYPE = "zsj"
+    if len(sys.argv) > 2:
+        if sys.argv[2] == "useky":
+            AREA_TYPE = "useky"
+        elif sys.argv[2] == "zsj":
+            AREA_TYPE = "zsj"
+        else:
+            print(
+                "Invalid argument. The second argument should be either zsj (default) or useky"
+            )
+else:
+    TYPE_OF_DATA = "ALL"
 
 
 def load_files_to_df(category):
@@ -259,19 +293,12 @@ def proces_parked_cars():
     if not os.path.exists(processed_dir):
         os.makedirs(processed_dir)
 
-    # check CLI argument - the first argument should be either zsj (default) or useky
-    # if zsj (default), we will use files ending with J.json
-    # if useky, we will use files ending with A.json (data for sections - úseky)
-    AREA_TYPE = "zsj"
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "useky":
-            AREA_TYPE = "useky"
-        else:
-            print(
-                "Invalid argument. The first argument should be either zsj (default) or useky"
-            )
-
     # File filtering and processing
+
+    # Check area type
+    # - if zsj (default), we will use files ending with J.json
+    # - if useky, we will use files ending with A.json (data for sections - úseky)
+
     if AREA_TYPE == "zsj":
         files = [file for file in os.listdir(data_dir) if file.endswith("J.json")]
     else:
@@ -381,9 +408,38 @@ def process_spaces():
     df.to_csv("data/processed/data_parking_spaces.csv", index=False)
 
 
-if TYPE_OF_DATA == "PARKED_CARS":
+def process_permits_and_spaces():
+    """
+    Produces a combined file with permits and spaces data.
+    """
+
+    # load permits data from processed CSV
+    df_permits = pd.read_csv("data/processed/data_parking_permits.csv")
+
+    # load spaces data
+    df_spaces = pd.read_csv("data/processed/data_parking_spaces.csv")
+
+    # rename MC in spaces data to Oblast
+    df_spaces.rename(columns={"MC": "Oblast"}, inplace=True)
+
+    # merge permits and spaces data
+    df = pd.merge(df_permits, df_spaces, on=["date", "Oblast"], how="outer")
+
+    # save to csv
+    df.to_csv("data/processed/data_parking_permits_and_spaces.csv", index=False)
+
+    print('Data saved to "data/processed/data_parking_permits_and_spaces.csv"')
+
+
+if TYPE_OF_DATA == "PARKING":
     proces_parked_cars()
 elif TYPE_OF_DATA == "PERMITS":
     process_permits()
 elif TYPE_OF_DATA == "SPACES":
+    process_spaces()
+elif TYPE_OF_DATA == "PERMITS_SPACES":
+    process_permits_and_spaces()
+elif TYPE_OF_DATA == "ALL":
+    proces_parked_cars()
+    process_permits()
     process_spaces()
