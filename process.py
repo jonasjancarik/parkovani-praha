@@ -2,24 +2,28 @@ import os
 import pandas as pd
 import json
 import sys
+from src import process
 
 # read TYPE_OF_DATA from command line
 # if no argument is provided, default to ALL
 if len(sys.argv) > 1:
-    # allow displaying help
-    if sys.argv[1].lower() == "-h" or sys.argv[1].lower() == "--help":
-        print(
-            "Usage: python process.py [TYPE_OF_DATA]\n\nTYPE_OF_DATA can be one of the following:\nPARKING\nPERMITS\nSPACES\nPERMITS_SPACES\nALL (default)"
-        )
-        sys.exit(0)
-    TYPE_OF_DATA = sys.argv[1].upper()
-    if TYPE_OF_DATA not in [
+    valid_args = [
         "PARKING",
         "PERMITS",
         "SPACES",
         "PERMITS_SPACES",
         "ALL",
-    ]:
+        "USEKY_NA_ZSJ",
+    ]
+
+    # allow displaying help
+    if sys.argv[1].lower() == "-h" or sys.argv[1].lower() == "--help":
+        print(
+            f"Usage: python process.py [TYPE_OF_DATA]\n\nTYPE_OF_DATA can be one of the following:\n{', '.join(valid_args)} (default)"
+        )
+        sys.exit(0)
+    TYPE_OF_DATA = sys.argv[1].upper()
+    if TYPE_OF_DATA not in valid_args:
         print(
             "Invalid argument. TYPE_OF_DATA can be one of the following:\nPARKING\nPERMITS\nSPACES\nPERMITS_SPACES\nALL (default)"
         )
@@ -275,6 +279,8 @@ def proces_parked_cars():
             df["parkovacich_mist_celkem"], axis="index"
         )
 
+        df["mestska_cast"] = add_leading_zero_to_district(df, "mestska_cast")
+
         return df
 
     def save_to_csv(df, processed_dir):
@@ -324,6 +330,26 @@ def proces_parked_cars():
     save_to_csv(df, processed_dir)
 
 
+def add_leading_zero_to_district(df, column):
+    """
+    Add leading zeros to district numbers.
+
+    This function takes a DataFrame `df` and a column name `column` as input.
+    It adds leading zeros to the district numbers in the specified column, ensuring that the format is consistent.
+    For example, if a district number is 'P1', it will be converted to 'P01'.
+    However, if a district number is already in the format 'P05', it will not be modified.
+
+    Parameters:
+    - df (pandas.DataFrame): The DataFrame containing the data.
+    - column (str): The name of the column containing the district numbers.
+
+    Returns:
+    - pandas.Series: A Series with the modified district numbers.
+    """
+
+    return df[column].str.replace(r"(?<=\bP)\d(?!\d)", "0\\g<0>", regex=True)
+
+
 def process_permits():
     print("Processing parking permit data...")
 
@@ -332,11 +358,7 @@ def process_permits():
     # now drop rows where Oblast == 'Enum'
     df = df[df["Oblast"] != "Enum"]
 
-    # # remove zeros from Oblast numbers, so e.g. P01 should become P1 or P01.01 should become P1.1. Regex should be used so that only zeros before digits are removed, so that we don't turn P10 to P1
-    # df["Oblast"] = df["Oblast"].str.replace(r"0+(?=\d)", "", regex=True)
-
-    # add leading zeros to Oblast numbers, so e.g. P1 should become P01 or P5 should become P05. But P05 shouldn't become P005. And only in the parts before dots. Regex should be used
-    df["Oblast"] = df["Oblast"].str.replace(r"(?<=\bP)\d(?!\d)", "0\\g<0>", regex=True)
+    df["Oblast"] = add_leading_zero_to_district(df, "Oblast")
 
     # identify Oblast values that contain dots - those are subdistricts
     subdistricts = df[df["Oblast"].str.contains("\.")]["Oblast"].unique()
@@ -425,6 +447,9 @@ def process_permits_and_spaces():
     # merge permits and spaces data
     df = pd.merge(df_permits, df_spaces, on=["date", "Oblast"], how="outer")
 
+    # drop rows where Oblast contains a dot
+    df = df[~df["Oblast"].str.contains("\.")]
+
     # save to csv
     df.to_csv("data/processed/data_parking_permits_and_spaces.csv", index=False)
 
@@ -443,3 +468,5 @@ elif TYPE_OF_DATA == "ALL":
     proces_parked_cars()
     process_permits()
     process_spaces()
+elif TYPE_OF_DATA == "USEKY_NA_ZSJ":
+    process.map_useky_to_zsj()
