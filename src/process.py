@@ -173,9 +173,16 @@ def map_useky_to_zsj():
 
         unmatched_all += unmatched_polygons
 
+    # convert overlaps_all to dataframe
+    overlaps_all_df = pd.DataFrame(overlaps_all)
+
+    # replace P with P0 in the mestka_cast column
+    overlaps_all_df["mestska_cast"] = overlaps_all_df["mestska_cast"].str.replace(
+        r"P(\d\b)", "P0\g<1>", regex=True
+    )
+
     # save overlaps_all to csv
-    overlaps_all = pd.DataFrame(overlaps_all)
-    overlaps_all.to_csv("data/useky_zsj_mapping.csv", index=False)
+    overlaps_all_df.to_csv("data/useky_zsj_mapping.csv", index=False)
 
     print(f"{len(unmatched_all)} smaller areas unmatched")
 
