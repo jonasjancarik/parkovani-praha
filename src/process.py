@@ -2,6 +2,7 @@ import json
 import os
 import pandas as pd
 from shapely.geometry import Polygon, Point
+import geopandas as gpd
 
 
 def get_latest_files(type_of_files):
@@ -245,10 +246,10 @@ def map_useky_to_zsj():
 def map_houses_to_useky():
     files_useky = get_latest_files("useky")
 
-    useky_pologyons = []
+    useky_polygons = []
 
     for counter, file in enumerate(files_useky, start=1):
-        useky_pologyons.extend(
+        useky_polygons.extend(
             json_to_polygons(
                 json.load(
                     open(f"data/downloaded/parked_cars/{file}", "r", encoding="utf-8")
@@ -257,7 +258,7 @@ def map_houses_to_useky():
         )
         print(f"Processed {counter}/{len(files_useky)} files", end="\r")
 
-    print(f"Loaded {len(useky_pologyons)} úseky           ")
+    print(f"Loaded {len(useky_polygons)} úseky           ")
 
     # get houses coordinates from the latest file
     print("Loading houses...")
@@ -274,35 +275,22 @@ def map_houses_to_useky():
 
     print("Mapping houses to úseky...")
 
-    for counter, house in enumerate(houses_points, start=1):
-        distances = []
+    # Convert data into GeoDataFrames
+    houses_gdf = gpd.GeoDataFrame(houses_points, geometry="coordinates")
+    useky_gdf = gpd.GeoDataFrame(useky_polygons, geometry="coordinates")
 
-        for usek in useky_pologyons:
-            # Calculate the distance from the point to the polygon
-            distance_data = {
-                "distance": house["coordinates"].distance(usek["coordinates"]),
-                "code": usek["CODE"],
-            }
+    # Spatial join on the nearest úsek
+    joined_gdf = gpd.sjoin_nearest(
+        houses_gdf, useky_gdf, how="left", distance_col="distance"
+    )
 
-            distances.append(distance_data)
+    # Extract the columns we need
+    final_gdf = joined_gdf[["CODE_left", "CODE_right"]]
 
-            # If the point is inside the polygon, assign the úsek to the house and continue with the next house
-            if distance_data["distance"] == 0:
-                house["usek"] = usek["CODE"]
-                break
+    # Rename the columns
+    final_gdf = final_gdf.rename(
+        columns={"CODE_left": "house_code", "CODE_right": "usek_code"}
+    )
 
-        # Convert distances to dataframe
-        distances_df = pd.DataFrame(distances)
-
-        # Find the closest úsek
-        closest_usek = distances_df.loc[distances_df["distance"].idxmin()]
-
-        house["usek"] = closest_usek["code"]
-
-        print(f"Processed {counter}/{len(houses_points)} houses", end="\r")
-
-    # convert houses to dataframe
-    houses_df = pd.DataFrame(houses_points)
-
-    # save houses to csv
-    houses_df.to_csv("data/houses_useky_mapping.csv", index=False)
+    # Save the result to a CSV file
+    final_gdf.to_csv("data/houses_useky_mapping.csv", index=False)
