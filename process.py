@@ -14,6 +14,7 @@ if len(sys.argv) > 1:
         "PERMITS_SPACES",
         "ALL",
         "USEKY_NA_ZSJ",
+        "DOMY_NA_USEKY",
     ]
 
     # allow displaying help
@@ -32,9 +33,9 @@ if len(sys.argv) > 1:
     # if there is a second argument, it should be either zsj (default) or useky
     AREA_TYPE = "zsj"
     if len(sys.argv) > 2:
-        if sys.argv[2] == "useky":
+        if sys.argv[2].lower() == "useky":
             AREA_TYPE = "useky"
-        elif sys.argv[2] == "zsj":
+        elif sys.argv[2].lower() == "zsj":
             AREA_TYPE = "zsj"
         else:
             print(
@@ -97,11 +98,14 @@ def proces_parked_cars():
             area = parse_graph_data(feature, area)
             if not any(area[key] == "NaN" for key in area):
                 areas.append(area)
-            else:
-                if AREA_TYPE == "zsj":
-                    print(f"Skipping area {area['NAZ_ZSJ']} due to missing data")
-                if AREA_TYPE == "useky":
-                    print(f"Skipping area {area['CODE']} due to missing data")
+            # else:
+            #     if AREA_TYPE == "zsj":
+            #         print(f"Skipping area {area['NAZ_ZSJ']} due to missing data")
+            #     if AREA_TYPE == "useky":
+            #         print(f"Skipping area {area['CODE']} due to missing data")
+        print(f"{len(areas)}/{len(data['features'])}")
+        if len(areas) == 0:
+            print("no areas in the file had data")
         return areas
 
     def parse_graph_data(feature, area):
@@ -281,6 +285,21 @@ def proces_parked_cars():
 
         df["mestska_cast"] = add_leading_zero_to_district(df, "mestska_cast")
 
+        if AREA_TYPE == "useky":
+            # let's join this with data from useky_zsj_mapping to get the ZSJ code and name
+            df_useky_zsj_mapping = pd.read_csv("data/useky_zsj_mapping.csv")
+
+            # rename column
+            df_useky_zsj_mapping = df_useky_zsj_mapping.rename(
+                columns={"code": "kod_useku"}
+            )
+
+            # join df with df_useky_zsj_mapping on kod_useku
+            df = pd.merge(df, df_useky_zsj_mapping, on="kod_useku", how="left")
+
+            # drop columns we don't need - mestska_cast_y
+            df = df.drop(columns=["mestska_cast_y"])
+
         return df
 
     def save_to_csv(df, processed_dir):
@@ -311,8 +330,9 @@ def proces_parked_cars():
         files = [file for file in os.listdir(data_dir) if file.endswith("A.json")]
     df = pd.DataFrame()
 
-    for counter, file in enumerate(files, start=1):
+    for counter, file in enumerate(files[:30], start=1):
         file_path = os.path.join(data_dir, file)
+        print(file_path)
         try:
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
@@ -322,7 +342,12 @@ def proces_parked_cars():
 
         areas = process_json_data(data)
         df2 = pd.DataFrame(areas)
-        df2 = enrich_dataframe(df2, file)
+        # check if dataframe isn't empty
+        if not df2.empty:
+            df2 = enrich_dataframe(df2, file)
+        else:
+            print(f"Skipping file {file} due to missing data")
+            continue
         df = pd.concat([df, df2], ignore_index=True)
         print(f"Processed {counter} out of {len(files)} files")
 
@@ -470,3 +495,5 @@ elif TYPE_OF_DATA == "ALL":
     process_spaces()
 elif TYPE_OF_DATA == "USEKY_NA_ZSJ":
     process.map_useky_to_zsj()
+elif TYPE_OF_DATA == "DOMY_NA_USEKY":
+    process.map_houses_to_useky()

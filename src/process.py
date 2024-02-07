@@ -1,58 +1,111 @@
 import json
 import os
 import pandas as pd
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point
+
+
+def get_latest_files(type_of_files):
+    if type_of_files == "zsj-useky":
+        # list files in data/downloaded/parked_cars
+        files = os.listdir("data/downloaded/parked_cars")
+
+        # each file is prefixed with a district code, e.g. P01-OB_201809D_NJ.json
+        # we need to extract the district codes and then for each district get the latest two files ending with _NA.json and _NJ.json
+        # NA = smaller areas (úseky), NJ = larger areas (zsj)
+
+        # extract district codes
+        districts = list(set([file.split("-")[0] for file in files]))
+
+        # extract latest two files ending with D_NA.json and D_NJ.json
+        pairs_to_process = []
+        for district in districts:
+            files_district = [
+                file
+                for file in files
+                if file.startswith(district)
+                and (file.endswith("D_NA.json") or file.endswith("D_NJ.json"))
+            ]
+            files_district = sorted(files_district, reverse=True)
+            pairs_to_process.append((files_district[0], files_district[1]))
+
+        return pairs_to_process
+
+    elif type_of_files == "useky":
+        # list files in data/downloaded/parked_cars
+        files = os.listdir("data/downloaded/parked_cars")
+
+        # each file is prefixed with a district code, e.g. P01-OB_201809D_NJ.json
+        # we need to extract the district codes and then for each district get the latest two files ending with _NA.json and _NJ.json
+        # NA = smaller areas (úseky), NJ = larger areas (zsj)
+
+        # extract district codes
+        districts = list(set([file.split("-")[0] for file in files]))
+
+        # extract latest two files ending with D_NA.json and D_NJ.json
+        files_to_return = []
+        for district in districts:
+            files_district = [
+                file
+                for file in files
+                if file.startswith(district) and (file.endswith("D_NA.json"))
+            ]
+            files_to_return.extend([sorted(files_district, reverse=True)[0]])
+
+        return files_to_return
+
+
+def json_to_polygons(json_data):
+    """
+    Convert TSK JSON data to Shapely polygons
+    """
+
+    def parse_coordinates(feature, house=False):
+        if house and feature.get("geometry"):
+            try:
+                return Point(feature["geometry"]["coordinates"])
+            except TypeError:
+                return None
+
+        try:
+            return Polygon(feature["geometry"]["coordinates"][0])
+        except TypeError:  # sometimes the coordinates are nested one level deeper
+            try:
+                return Polygon(feature["geometry"]["coordinates"][0][0])
+            except TypeError:
+                # sometimes the coordinates are empty (None)
+                return None
+
+    polygons = []
+    for feature in json_data["features"]:
+        if "KOD_ZSJ" in feature["properties"]:
+            polygon_data = {
+                "KOD_ZSJ": feature["properties"]["KOD_ZSJ"],
+                "NAZ_ZSJ": feature["properties"]["NAZ_ZSJ"],
+                "coordinates": parse_coordinates(feature),
+            }
+            if polygon_data["coordinates"]:
+                polygons.append(polygon_data)
+        elif "CODE" in feature["properties"]:
+            if "-" in str(feature["properties"]["CODE"]):  # zone codes have a dash
+                polygon_data = {
+                    "CODE": feature["properties"]["CODE"],
+                    "coordinates": parse_coordinates(feature),
+                }
+                if polygon_data["coordinates"]:
+                    polygons.append(polygon_data)
+            else:
+                polygon_data = {
+                    "CODE": feature["properties"]["CODE"],
+                    "coordinates": parse_coordinates(feature, house=True),
+                }
+                if polygon_data["coordinates"]:
+                    polygons.append(polygon_data)
+
+    return polygons
 
 
 def map_useky_to_zsj():
-    # Function to convert JSON data to Shapely polygons
-    def json_to_polygons(json_data):
-        def parse_coordinates(feature):
-            try:
-                return Polygon(feature["geometry"]["coordinates"][0])
-            except TypeError:  # sometimes the coordinates are nested one level deeper
-                return Polygon(feature["geometry"]["coordinates"][0][0])
-
-        polygons = []
-        for feature in json_data["features"]:
-            if "KOD_ZSJ" in feature["properties"]:
-                polygons.append(
-                    {
-                        "KOD_ZSJ": feature["properties"]["KOD_ZSJ"],
-                        "NAZ_ZSJ": feature["properties"]["NAZ_ZSJ"],
-                        "coordinates": parse_coordinates(feature),
-                    }
-                )
-            elif "CODE" in feature["properties"]:
-                polygons.append(
-                    {
-                        "CODE": feature["properties"]["CODE"],
-                        "coordinates": parse_coordinates(feature),
-                    }
-                )
-        return polygons
-
-    # list files in data/downloaded/parked_cars
-    files = os.listdir("data/downloaded/parked_cars")
-
-    # each file is prefixed with a district code, e.g. P01-OB_201809D_NJ.json
-    # we need to extract the district codes and then for each district get the latest two files ending with _NA.json and _NJ.json
-    # NA = smaller areas (úseky), NJ = larger areas (zsj)
-
-    # extract district codes
-    districts = list(set([file.split("-")[0] for file in files]))
-
-    # extract latest two files ending with D_NA.json and D_NJ.json
-    pairs_to_process = []
-    for district in districts:
-        files_district = [
-            file
-            for file in files
-            if file.startswith(district)
-            and (file.endswith("D_NA.json") or file.endswith("D_NJ.json"))
-        ]
-        files_district = sorted(files_district, reverse=True)
-        pairs_to_process.append((files_district[0], files_district[1]))
+    pairs_to_process = get_latest_files("zsj-useky")
 
     overlaps_all = []
     unmatched_all = []
@@ -187,3 +240,69 @@ def map_useky_to_zsj():
     print(f"{len(unmatched_all)} smaller areas unmatched")
 
     print("Done.")
+
+
+def map_houses_to_useky():
+    files_useky = get_latest_files("useky")
+
+    useky_pologyons = []
+
+    for counter, file in enumerate(files_useky, start=1):
+        useky_pologyons.extend(
+            json_to_polygons(
+                json.load(
+                    open(f"data/downloaded/parked_cars/{file}", "r", encoding="utf-8")
+                )
+            )
+        )
+        print(f"Processed {counter}/{len(files_useky)} files", end="\r")
+
+    print(f"Loaded {len(useky_pologyons)} úseky           ")
+
+    # get houses coordinates from the latest file
+    print("Loading houses...")
+
+    houses_points = json_to_polygons(
+        json.load(
+            open(
+                f"data/downloaded/houses/{sorted(os.listdir("data/downloaded/houses"), reverse=True)[0]}",
+                "r",
+                encoding="utf-8",
+            )
+        )
+    )
+
+    print("Mapping houses to úseky...")
+
+    for counter, house in enumerate(houses_points, start=1):
+        distances = []
+
+        for usek in useky_pologyons:
+            # Calculate the distance from the point to the polygon
+            distance_data = {
+                "distance": house["coordinates"].distance(usek["coordinates"]),
+                "code": usek["CODE"],
+            }
+
+            distances.append(distance_data)
+
+            # If the point is inside the polygon, assign the úsek to the house and continue with the next house
+            if distance_data["distance"] == 0:
+                house["usek"] = usek["CODE"]
+                break
+
+        # Convert distances to dataframe
+        distances_df = pd.DataFrame(distances)
+
+        # Find the closest úsek
+        closest_usek = distances_df.loc[distances_df["distance"].idxmin()]
+
+        house["usek"] = closest_usek["code"]
+
+        print(f"Processed {counter}/{len(houses_points)} houses", end="\r")
+
+    # convert houses to dataframe
+    houses_df = pd.DataFrame(houses_points)
+
+    # save houses to csv
+    houses_df.to_csv("data/houses_useky_mapping.csv", index=False)

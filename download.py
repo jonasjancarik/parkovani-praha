@@ -7,7 +7,7 @@ load_dotenv()
 USER = os.getenv("TSK_USERNAME")
 PASSWORD = os.getenv("TSK_PASSWORD")
 
-TYPE_OF_DATA = "PARKING"  # one of PARKING, PARKING_PERMITS, PARKING_SPACES
+TYPE_OF_DATA = "HOUSES"  # one of PARKING, PARKING_PERMITS, PARKING_SPACES, HOUSES
 
 YEARS = [2018, 2019, 2020, 2021, 2022, 2023]
 START_MONTH = 1
@@ -259,3 +259,61 @@ if TYPE_OF_DATA == "PARKING_SPACES":
             print(f"Progress: {counter}/{len(filenames)}", end="\r")
 
     print("\nDone")
+
+if TYPE_OF_DATA == "HOUSES":
+    # the URLs look like this: https://zps.tsk-praha.cz/puzzle/genmaps/PO_201801M_TR.json
+    # let's cycle through the years and months and download the data
+    # the data is in the form of a JSON file
+
+    # create directory if it does not exist
+    if not os.path.exists("data/downloaded/houses"):
+        os.makedirs("data/downloaded/houses")
+        downloaded_files = []
+    else:
+        # get list of already downloaded files
+        downloaded_files = os.listdir("data/downloaded/houses")
+
+    # generate list of filenames
+    filenames = []
+
+    filename_template = "PO_YYYYMMM_TR.json"
+
+    START_YEAR = 2018
+    START_MONTH = 1
+
+    current_year = datetime.datetime.now().year
+    current_month = datetime.datetime.now().month
+
+    # loop through months and years until we reach current month
+    for year in range(START_YEAR, current_year + 1):
+        for month in range(1, 13):
+            if year == START_YEAR and month < int(START_MONTH):
+                continue
+            if year == current_year and month > current_month:
+                continue
+            filename = filename_template.replace("YYYY", str(year)).replace(
+                "MMM", str(month).zfill(2) + "M"
+            )
+            if filename not in downloaded_files:
+                filenames.append(filename)
+
+    print(f"Downloading {len(filenames)} files")
+
+    with requests.Session() as s:
+        s = session_setup(s)
+
+        for counter, filename in enumerate(filenames):
+            url = "https://zps.tsk-praha.cz/puzzle/genmaps/" + filename
+            counter += 1
+            r = s.head(url)
+            # check response status code
+            if r.status_code != 200:
+                print(f"Error while downloading {filename}")  # todo: add to skip list
+                continue
+            else:
+                r = s.get(url)
+
+            with open(f"data/downloaded/houses/{filename}", "w", encoding="utf-8") as f:
+                f.write(r.text)
+
+            print(f"Progress: {counter}/{len(filenames)}", end="\r")
