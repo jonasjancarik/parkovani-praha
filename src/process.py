@@ -6,6 +6,9 @@ import geopandas as gpd
 
 
 def get_latest_files(type_of_files):
+    if type_of_files not in ["zsj-useky", "useky"]:
+        raise ValueError("type_of_files must be either 'zsj-useky' or 'useky'")
+
     if type_of_files == "zsj-useky":
         # list files in data/downloaded/parked_cars
         files = os.listdir("data/downloaded/parked_cars")
@@ -232,7 +235,7 @@ def map_useky_to_zsj():
 
     # replace P with P0 in the mestka_cast column
     overlaps_all_df["mestska_cast"] = overlaps_all_df["mestska_cast"].str.replace(
-        r"P(\d\b)", "P0\g<1>", regex=True
+        r"P(\d\b)", r"P0\g<1>", regex=True
     )
 
     # save overlaps_all to csv

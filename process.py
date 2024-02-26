@@ -309,7 +309,7 @@ def proces_parked_cars():
         df.to_csv(output_file, index=False, encoding="utf-8")
         print("Data saved to:", output_file)
 
-    # Main Script
+    # main part of the function
 
     # Directory paths
     data_dir = "data/downloaded/parked_cars"
@@ -326,8 +326,10 @@ def proces_parked_cars():
 
     if AREA_TYPE == "zsj":
         files = [file for file in os.listdir(data_dir) if file.endswith("J.json")]
-    else:
+    elif AREA_TYPE == "useky":
         files = [file for file in os.listdir(data_dir) if file.endswith("A.json")]
+    else:
+        raise ValueError("Invalid area type (should be either zsj or useky)")
     df = pd.DataFrame()
 
     for counter, file in enumerate(files[:30], start=1):
@@ -386,7 +388,7 @@ def process_permits():
     df["Oblast"] = add_leading_zero_to_district(df, "Oblast")
 
     # identify Oblast values that contain dots - those are subdistricts
-    subdistricts = df[df["Oblast"].str.contains("\.")]["Oblast"].unique()
+    subdistricts = df[df["Oblast"].str.contains(r"\.")]["Oblast"].unique()
 
     # identify districts with subdistricts - this means removing the parts after the dot
     districts_with_subdistricts = {
@@ -473,7 +475,7 @@ def process_permits_and_spaces():
     df = pd.merge(df_permits, df_spaces, on=["date", "Oblast"], how="outer")
 
     # drop rows where Oblast contains a dot
-    df = df[~df["Oblast"].str.contains("\.")]
+    df = df[~df["Oblast"].str.contains(r"\.")]
 
     # save to csv
     df.to_csv("data/processed/data_parking_permits_and_spaces.csv", index=False)
