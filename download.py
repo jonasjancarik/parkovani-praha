@@ -9,11 +9,6 @@ load_dotenv()
 USER = os.getenv("TSK_USERNAME")
 PASSWORD = os.getenv("TSK_PASSWORD")
 
-# load cli argument for type of data to download
-# if not provided, default to PARKING
-# if provided, check if it is one of the valid options
-# if not, print error message and exit
-
 parser = argparse.ArgumentParser(description="Download data for parking in Prague.")
 parser.add_argument(
     "type_of_data",

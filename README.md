@@ -12,8 +12,32 @@ pip install -r requirements.txt
 
 ## Stažení dat
 
-- přepiš ve skriptu download.py konfigurační konstanty (zda stahovat úseky nebo ZSJ, rok, měsíc, typ souboru...)
-- `download.py` stáhne potřebné soubory do složky `data/downloaded/`
+Pro stažení dat je potřeba spustit skript `download.py`:
+
+```bash
+python download.py {typ dat}
+```
+
+Kde `{typ dat}` je jeden z následujících:
+- PARKING - data o využití zón
+- PARKING_PERMITS - data o vydaných parkovacích povoleních
+- PARKING_SPACES - data o parkovacích místech
+- HOUSES - data o registracích na jednotlivých adresách
+
+Soubory, které jsem již stáhl, jsou k dispozici přímo v tomto projektu. Z opatrnosti vzhledem k možným citlivým údajům nenahrávám data o adresách.
+
+Další možné parametry jsou"
+
+- `--start-year` - rok, od kterého se mají stahovat data
+- `--end-year` - rok, do kterého se mají stahovat data
+- `--include-quarterly` - stáhnout i čtvrtletní data (ne jen měsíční)
+- `--include-sections` - stáhnout i data o jednotlivých úsecích
+
+Příklad:
+
+```bash
+python download.py PARKING --start-year 2020 --end-year 2023 --include-sections
+```
 
 ## Analýza dat
 
