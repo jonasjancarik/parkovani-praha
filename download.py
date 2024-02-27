@@ -2,18 +2,79 @@ import requests
 import os
 from dotenv import load_dotenv
 import datetime
+import sys
+import argparse
 
 load_dotenv()
 USER = os.getenv("TSK_USERNAME")
 PASSWORD = os.getenv("TSK_PASSWORD")
 
-TYPE_OF_DATA = "HOUSES"  # one of PARKING, PARKING_PERMITS, PARKING_SPACES, HOUSES
+# load cli argument for type of data to download
+# if not provided, default to PARKING
+# if provided, check if it is one of the valid options
+# if not, print error message and exit
 
-YEARS = [2018, 2019, 2020, 2021, 2022, 2023]
+parser = argparse.ArgumentParser(description="Download data for parking in Prague.")
+parser.add_argument(
+    "type_of_data",
+    choices=["PARKING", "PARKING_PERMITS", "PARKING_SPACES", "HOUSES"],
+    help="Type of data to download",
+)
+parser.add_argument(
+    "--start_year",
+    type=int,
+    default=2018,
+    help="Year to start downloading data from",
+)
+parser.add_argument(
+    "--end_year",
+    type=int,
+    default=datetime.datetime.now().year,
+    help="Year to end downloading data from",
+)
+parser.add_argument(
+    "--include_quarterly",
+    action="store_true",
+    help="Include quarterly data",
+)
+parser.add_argument(
+    "--include-sections",
+    action="store_true",
+    help="Include section data (úseky)",
+)
+
+args = parser.parse_args()
+
+TYPE_OF_DATA = args.type_of_data
+
+# build list of years to download data for
+# if start_year is greater than end_year, print error message and exit
+# if start_year is greater than current year, print error message and exit
+# if end_year is greater than current year, set it to current year
+
+if args.start_year > args.end_year:
+    print("Start year must be less than or equal to end year")
+    sys.exit()
+if args.start_year > datetime.datetime.now().year:
+    print("Start year must be less than or equal to current year")
+    sys.exit()
+
+if args.end_year > datetime.datetime.now().year:
+    args.end_year = datetime.datetime.now().year
+
+YEARS = list(range(args.start_year, args.end_year + 1))
+
+# set start month to 1 (hardcoded)
 START_MONTH = 1
-END_MONTH = 12
-INCLUDE_QUARTERLY = False
-INCLUDE_SECTIONS = False  # úseky
+
+# set end month to 12, unless it's the current year, then set it to the current month
+if args.end_year == datetime.datetime.now().year:
+    END_MONTH = datetime.datetime.now().month
+else:
+    END_MONTH = 12
+
+INCLUDE_QUARTERLY = args.include_quarterly
+INCLUDE_SECTIONS = args.include_sections
 
 districts = [
     "P01",
@@ -122,12 +183,28 @@ if TYPE_OF_DATA == "PARKING":
             # check response status code
             if r.status_code != 200:
                 print(f"Error while downloading {filename}")
-                # add to skip list
-                skip.append(f"{filename}")
-                # save skip list
-                with open("data/skip.txt", "w", encoding="utf-8") as f:
-                    f.write("\n".join(skip))
-                continue
+
+                # Check if the year and month are the previous month or newer
+                year = int(filename_server.split("_")[1][:4])
+                month = int(filename_server.split("_")[1][4:6])
+
+                # build date object
+                date = datetime.datetime(year, month, 1)
+
+                # Check if the date is in the previous month or newer
+                if date > datetime.datetime.now() - datetime.timedelta(days=30):
+                    # If the year and month are current or future, don't add to skip list
+                    print(
+                        "-> File missing, but it's too new so it might be added later."
+                    )
+                    continue
+                else:
+                    # Add to skip list
+                    skip.append(f"{filename}")
+                    # Save skip list
+                    with open("data/skip.txt", "w", encoding="utf-8") as f:
+                        f.write("\n".join(skip))
+                    continue
             else:
                 r = s.get(url)
             with open(
