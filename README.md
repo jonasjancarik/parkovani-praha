@@ -39,9 +39,27 @@ Příklad:
 python download.py PARKING --start-year 2020 --end-year 2023 --include-sections
 ```
 
+## Příprava dat
+
+Pro přípravu dat je potřeba spustit skript `process.py`:
+
+```bash
+python process.py
+```
+
+Je možné vybrat jen určitý typ dat, který se má zpracovat:
+
+- parking
+- permits
+- spaces
+- permits_spaces
+- all
+- useky_na_zsj
+- domy_na_useky
+
 ## Analýza dat
 
-- `analyze.py` zpracuje soubory a vytvoří výstupní soubor `data/processed/data.csv`
+- `analysis.py` je rozpracovaný skript, který by měl sloužit k analýze dat
 
 # Co znamenají názvy souborů?
 
