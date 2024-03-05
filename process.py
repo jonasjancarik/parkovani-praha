@@ -15,8 +15,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-AREA_TYPE = "useky"  # hardcoded - in future all resulting data should be based on zone-level data (useky)
-
 
 def parse_arguments():
     valid_args = {
@@ -179,15 +177,8 @@ def process_parked_cars():
             "ResPct": "rezidenti_do_500m",
         }
 
-        if AREA_TYPE == "zsj":
-            new_column_names["KOD_ZSJ"] = "kod_zsj"
-            new_column_names["NAZ_ZSJ"] = "nazev_zsj"
-            new_column_names["Obyv_total"] = "obyvatel"
-        elif AREA_TYPE == "useky":
-            new_column_names["CODE"] = "kod_useku"
-            new_column_names["CATEGORY"] = "kategorie"
-        else:
-            raise ValueError("Invalid data type (should be either zsj or useky)")
+        new_column_names["CODE"] = "kod_useku"
+        new_column_names["CATEGORY"] = "kategorie"
 
         df.rename(columns=new_column_names, inplace=True)
 
@@ -211,48 +202,25 @@ def process_parked_cars():
         )
 
         # divide percentage values by 100
-        if AREA_TYPE == "zsj":
-            percent_columns = list(
-                set(df.columns)
-                - set(
-                    [
-                        "filename",
-                        "mestska_cast",
-                        "část dne",
-                        "kod_zsj",
-                        "nazev_zsj",
-                        "parkovacich_mist_celkem",
-                        "parkovacich_mist_v_zps",
-                        "obyvatel",
-                        "date",
-                        "frekvence",
-                    ]
-                )
+        percent_columns = list(
+            set(df.columns)
+            - set(
+                [
+                    "filename",
+                    "mestska_cast",
+                    "část dne",
+                    "kod_useku",
+                    "kategorie",
+                    "parkovacich_mist_celkem",
+                    "parkovacich_mist_v_zps",
+                    "date",
+                    "frekvence",
+                    "kod_zsj",
+                    "naz_zsj",
+                    "code",
+                ]
             )
-
-        elif AREA_TYPE == "useky":
-            percent_columns = list(
-                set(df.columns)
-                - set(
-                    [
-                        "filename",
-                        "mestska_cast",
-                        "část dne",
-                        "kod_useku",
-                        "kategorie",
-                        "parkovacich_mist_celkem",
-                        "parkovacich_mist_v_zps",
-                        "date",
-                        "frekvence",
-                        "kod_zsj",
-                        "naz_zsj",
-                        "code",
-                    ]
-                )
-            )
-
-        else:
-            raise ValueError("Invalid data type (should be either zsj or useky)")
+        )
 
         df[percent_columns] = df[percent_columns] / 100
 
@@ -277,7 +245,7 @@ def process_parked_cars():
     def save_to_csv(df, processed_dir):
         if not os.path.exists(processed_dir):
             os.makedirs(processed_dir)
-        output_file = os.path.join(processed_dir, f"data_{AREA_TYPE}.csv")
+        output_file = os.path.join(processed_dir, "data_useky.csv")
         df.to_csv(output_file, index=False, encoding="utf-8")
         logging.info("Data saved to:", output_file)
 
