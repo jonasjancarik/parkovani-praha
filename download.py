@@ -28,11 +28,6 @@ parser.add_argument(
     help="Year to end downloading data from",
 )
 parser.add_argument(
-    "--include_quarterly",
-    action="store_true",
-    help="Include quarterly data",
-)
-parser.add_argument(
     "--include-sections",
     action="store_true",
     help="Include section data (úseky)",
@@ -98,36 +93,11 @@ def session_setup(session):
 if TYPE_OF_DATA == "PARKING":
     filename_templates = [
         "OB_YYYYMMD_NA.json",
-        "OB_YYYYMMD_NJ.json",
-        "OB_YYYYMMD_QA.json",
-        "OB_YYYYMMD_QJ.json",
         "OB_YYYYMMN_NA.json",
-        "OB_YYYYMMN_NJ.json",
-        "OB_YYYYMMN_QA.json",
-        "OB_YYYYMMN_QJ.json",
         "OB_YYYYMMP_NA.json",
-        "OB_YYYYMMP_NJ.json",
-        "OB_YYYYMMS_QA.json",
-        "OB_YYYYMMS_QJ.json",
         "OB_YYYYMMW_NA.json",
-        "OB_YYYYMMW_NJ.json",
-        "OB_YYYYMMW_QA.json",
-        "OB_YYYYMMW_QJ.json",
         "OB_YYYYMMX_NA.json",
-        "OB_YYYYMMX_NJ.json",
-        "OB_YYYYMMX_QA.json",
-        "OB_YYYYMMX_QJ.json",
     ]
-
-    if not INCLUDE_QUARTERLY:
-        filename_templates = [
-            filename for filename in filename_templates if "_Q" not in filename
-        ]
-
-    if not INCLUDE_SECTIONS:
-        filename_templates = [
-            filename for filename in filename_templates if "A.json" not in filename
-        ]
 
     url_template = "https://zps.tsk-praha.cz/puzzle/genmaps/DISTRICT/FILENAME"
 

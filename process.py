@@ -2,79 +2,47 @@ import os
 import pandas as pd
 import json
 import sys
-from src import process
+from src import mapping, utils
 
-# read TYPE_OF_DATA from command line
-# if no argument is provided, default to ALL
-if len(sys.argv) > 1:
-    valid_args = [
-        "PARKING",
-        "PERMITS",
-        "SPACES",
-        "PERMITS_SPACES",
-        "ALL",
-        "USEKY_NA_ZSJ",
-        "DOMY_NA_USEKY",
-    ]
-
-    # allow displaying help
-    if sys.argv[1].lower() == "-h" or sys.argv[1].lower() == "--help":
-        print(
-            f"Usage: python process.py [TYPE_OF_DATA]\n\nTYPE_OF_DATA can be one of the following:\n{', '.join(valid_args)} (default)"
-        )
-        sys.exit(0)
-    TYPE_OF_DATA = sys.argv[1].upper()
-    if TYPE_OF_DATA not in valid_args:
-        print(
-            "Invalid argument. TYPE_OF_DATA can be one of the following:\nPARKING\nPERMITS\nSPACES\nPERMITS_SPACES\nALL (default)"
-        )
-        sys.exit(0)
-
-    # if there is a second argument, it should be either zsj (default) or useky
-    AREA_TYPE = "zsj"
-    if len(sys.argv) > 2:
-        if sys.argv[2].lower() == "useky":
-            AREA_TYPE = "useky"
-        elif sys.argv[2].lower() == "zsj":
-            AREA_TYPE = "zsj"
-        else:
-            print(
-                "Invalid argument. The second argument should be either zsj (default) or useky"
-            )
-else:
-    TYPE_OF_DATA = "ALL"
+AREA_TYPE = "useky"  # hardcoded - in future all resulting data should be based on zone-level data (useky)
 
 
-def load_files_to_df(category):
-    """
-    Load TSV files from the specified category directory and merge them into a single dataframe.
+def parse_arguments():
+    valid_args = {
+        "PARKING": process_parked_cars,
+        "PERMITS": process_permits,
+        "SPACES": process_spaces,
+        "PERMITS_SPACES": process_permits_and_spaces,
+        "ALL": lambda: [
+            process_parked_cars(),
+            process_permits(),
+            process_spaces(),
+            process_permits_and_spaces(),
+        ],
+        "USEKY_NA_ZSJ": mapping.map_useky_to_zsj,
+        "DOMY_NA_USEKY": mapping.map_houses_to_useky,
+    }
 
-    Parameters:
-    category (str): The category directory name.
-
-    Returns:
-    pandas.DataFrame: The merged dataframe containing data from all files.
-    """
-
-    # get list of files in data/downloaded/permits
-
-    try:
-        files = os.listdir(f"data/downloaded/{category}")
-    except FileNotFoundError:
-        print(f"No files found in data/downloaded/{category}")
-        sys.exit(0)
-
-    # merge all files into one dataframe
-    df = pd.DataFrame()
-    for file in files:
-        file_path = os.path.join(f"data/downloaded/{category}", file)
-        df2 = pd.read_csv(file_path, encoding="utf-8", delimiter="\t")
-        df = pd.concat([df, df2], ignore_index=True)
-
-    return df
+    arg = sys.argv[1].upper() if len(sys.argv) > 1 else "ALL"
+    if arg in valid_args:
+        return valid_args[arg]
+    elif arg in ["-H", "--HELP"]:
+        display_help(valid_args.keys())
+        sys.exit()
+    else:
+        print(f"Invalid argument: {arg}")
+        display_help(valid_args.keys())
+        sys.exit(1)
 
 
-def proces_parked_cars():
+def display_help(valid_args):
+    print("Usage: python process.py [TYPE_OF_DATA]")
+    print("\nTYPE_OF_DATA can be one of the following:")
+    for arg in valid_args:
+        print(f"- {arg}")
+
+
+def process_parked_cars():
     def process_json_data(data):
         areas = []
         for feature in data["features"]:
@@ -98,14 +66,14 @@ def proces_parked_cars():
             area = parse_graph_data(feature, area)
             if not any(area[key] == "NaN" for key in area):
                 areas.append(area)
-            # else:
+            # else:  # todo: show debug log
             #     if AREA_TYPE == "zsj":
             #         print(f"Skipping area {area['NAZ_ZSJ']} due to missing data")
             #     if AREA_TYPE == "useky":
             #         print(f"Skipping area {area['CODE']} due to missing data")
-        print(f"{len(areas)}/{len(data['features'])}")
+        print(f"-> {len(areas)}/{len(data['features'])} zones had data")
         if len(areas) == 0:
-            print("no areas in the file had data")
+            print("-> no areas in the file had data")
         return areas
 
     def parse_graph_data(feature, area):
@@ -135,7 +103,8 @@ def proces_parked_cars():
                     updated_area[graph_legend[i]] = datapoint
         return updated_area
 
-    def enrich_dataframe(df, file):
+    def enrich_dataframe(df, file, zones_to_areas_df):
+        # parse time period code
         time_period = {
             "D_": "den",
             "N_": "noc",
@@ -147,11 +116,15 @@ def proces_parked_cars():
         df["část dne"] = next(
             (time_period[key] for key in time_period if key in file), "Unknown"
         )
-        if AREA_TYPE == "zsj":
-            df["mestska_cast"] = file.split("-")[0].replace("P0", "P")
-        if AREA_TYPE == "useky":
-            # split CODE column by - and take the first part
-            df["mestska_cast"] = df["CODE"].str.split("-").str[0].replace("P0", "P")
+
+        # add area (ZSJ)
+        # assign the ZSJ code to each zone based on the zones_to_areas_df; join the two dataframes on 'code'
+        df = df.merge(zones_to_areas_df, on="CODE")
+
+        # remove column 'overlap'
+        df = df.drop(columns=["overlap"])
+
+        # add column with the source file name
         df["filename"] = file
 
         # add date column
@@ -260,6 +233,9 @@ def proces_parked_cars():
                         "parkovacich_mist_v_zps",
                         "date",
                         "frekvence",
+                        "kod_zsj",
+                        "naz_zsj",
+                        "code",
                     ]
                 )
             )
@@ -283,22 +259,7 @@ def proces_parked_cars():
             df["parkovacich_mist_celkem"], axis="index"
         )
 
-        df["mestska_cast"] = add_leading_zero_to_district(df, "mestska_cast")
-
-        if AREA_TYPE == "useky":
-            # let's join this with data from useky_zsj_mapping to get the ZSJ code and name
-            df_useky_zsj_mapping = pd.read_csv("data/useky_zsj_mapping.csv")
-
-            # rename column
-            df_useky_zsj_mapping = df_useky_zsj_mapping.rename(
-                columns={"code": "kod_useku"}
-            )
-
-            # join df with df_useky_zsj_mapping on kod_useku
-            df = pd.merge(df, df_useky_zsj_mapping, on="kod_useku", how="left")
-
-            # drop columns we don't need - mestska_cast_y
-            df = df.drop(columns=["mestska_cast_y"])
+        df["mestska_cast"] = utils.add_leading_zero_to_district(df, "mestska_cast")
 
         return df
 
@@ -309,7 +270,9 @@ def proces_parked_cars():
         df.to_csv(output_file, index=False, encoding="utf-8")
         print("Data saved to:", output_file)
 
-    # main part of the function
+    ####################################################
+    # main part of the parked cars processing function #
+    ####################################################
 
     # Directory paths
     data_dir = "data/downloaded/parked_cars"
@@ -318,74 +281,73 @@ def proces_parked_cars():
     if not os.path.exists(processed_dir):
         os.makedirs(processed_dir)
 
-    # File filtering and processing
+    # File filtering
+    # - we need zone (useky) data, meaning files ending with A.json
 
-    # Check area type
-    # - if zsj (default), we will use files ending with J.json
-    # - if useky, we will use files ending with A.json (data for sections - úseky)
+    files = [file for file in os.listdir(data_dir) if file.endswith("A.json")]
 
-    if AREA_TYPE == "zsj":
-        files = [file for file in os.listdir(data_dir) if file.endswith("J.json")]
-    elif AREA_TYPE == "useky":
-        files = [file for file in os.listdir(data_dir) if file.endswith("A.json")]
-    else:
-        raise ValueError("Invalid area type (should be either zsj or useky)")
-    df = pd.DataFrame()
+    # load mapping of zones to areas
+    try:
+        zones_to_areas_df = pd.read_csv("data/useky_zsj_mapping.csv")
+    except Exception:  # todo: better exception handling
+        print("Run `process.py useky_na_zsj` first.")
+        sys.exit(1)
 
-    for counter, file in enumerate(files[:30], start=1):
+    # make CODE column uppercase, we'll be using it to merge the dfs
+    zones_to_areas_df["CODE"] = zones_to_areas_df["code"]
+
+    # Processing
+
+    parked_cars_all_df = pd.DataFrame()
+
+    # loop through files (districts)
+    for counter, file in enumerate(files, start=1):
         file_path = os.path.join(data_dir, file)
-        print(file_path)
+
+        print(f"Processing {file_path}")
+
         try:
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
         except json.decoder.JSONDecodeError:
-            print(f"Error while reading {file} (potentially missing data)")
+            print(f"Error while loading {file} (potentially missing data)")
             continue
 
-        areas = process_json_data(data)
-        df2 = pd.DataFrame(areas)
-        # check if dataframe isn't empty
-        if not df2.empty:
-            df2 = enrich_dataframe(df2, file)
+        parked_cars_district = process_json_data(data)
+        parked_cars_district_df = pd.DataFrame(parked_cars_district)
+
+        # enrich the data (unless empty)
+        if not parked_cars_district_df.empty:
+            parked_cars_district_df = enrich_dataframe(
+                parked_cars_district_df, file, zones_to_areas_df
+            )
         else:
             print(f"Skipping file {file} due to missing data")
             continue
-        df = pd.concat([df, df2], ignore_index=True)
+
+        # append this zone's data to the main dataframe
+        parked_cars_all_df = pd.concat(
+            [parked_cars_all_df, parked_cars_district_df], ignore_index=True
+        )
         print(f"Processed {counter} out of {len(files)} files")
 
-    df = rename_and_calculate_columns(df)
-    save_to_csv(df, processed_dir)
+    # rename columns to more readable names
+    parked_cars_all_df = rename_and_calculate_columns(parked_cars_all_df)
 
-
-def add_leading_zero_to_district(df, column):
-    """
-    Add leading zeros to district numbers.
-
-    This function takes a DataFrame `df` and a column name `column` as input.
-    It adds leading zeros to the district numbers in the specified column, ensuring that the format is consistent.
-    For example, if a district number is 'P1', it will be converted to 'P01'.
-    However, if a district number is already in the format 'P05', it will not be modified.
-
-    Parameters:
-    - df (pandas.DataFrame): The DataFrame containing the data.
-    - column (str): The name of the column containing the district numbers.
-
-    Returns:
-    - pandas.Series: A Series with the modified district numbers.
-    """
-
-    return df[column].str.replace(r"(?<=\bP)\d(?!\d)", "0\\g<0>", regex=True)
+    # export to CSV
+    print("Saving CSV...")
+    save_to_csv(parked_cars_all_df, processed_dir)
 
 
 def process_permits():
     print("Processing parking permit data...")
 
-    df = load_files_to_df("permits")
+    df = utils.load_files_to_df("permits")
 
     # now drop rows where Oblast == 'Enum'
     df = df[df["Oblast"] != "Enum"]
 
-    df["Oblast"] = add_leading_zero_to_district(df, "Oblast")
+    df["Oblast"] = utils.add_leading_zero_to_district(df, "Oblast")
 
     # identify Oblast values that contain dots - those are subdistricts
     subdistricts = df[df["Oblast"].str.contains(r"\.")]["Oblast"].unique()
@@ -445,7 +407,7 @@ def process_permits():
 def process_spaces():
     print("Processing parking spaces data...")
 
-    df = load_files_to_df("spaces")
+    df = utils.load_files_to_df("spaces")
 
     # turn Season into date. Season is YYYYMM, so add 01 to the end to make it YYYYMMDD and then convert to date
     df["date"] = pd.to_datetime(df["Season"].astype(str) + "01")
@@ -483,19 +445,6 @@ def process_permits_and_spaces():
     print('Data saved to "data/processed/data_parking_permits_and_spaces.csv"')
 
 
-if TYPE_OF_DATA == "PARKING":
-    proces_parked_cars()
-elif TYPE_OF_DATA == "PERMITS":
-    process_permits()
-elif TYPE_OF_DATA == "SPACES":
-    process_spaces()
-elif TYPE_OF_DATA == "PERMITS_SPACES":
-    process_permits_and_spaces()
-elif TYPE_OF_DATA == "ALL":
-    proces_parked_cars()
-    process_permits()
-    process_spaces()
-elif TYPE_OF_DATA == "USEKY_NA_ZSJ":
-    process.map_useky_to_zsj()
-elif TYPE_OF_DATA == "DOMY_NA_USEKY":
-    process.map_houses_to_useky()
+if __name__ == "__main__":
+    process_function = parse_arguments()
+    process_function()

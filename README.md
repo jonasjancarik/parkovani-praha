@@ -15,10 +15,10 @@ pip install -r requirements.txt
 Pro stažení dat je potřeba spustit skript `download.py`:
 
 ```bash
-python download.py {typ dat}
+python download.py <typ dat>
 ```
 
-Kde `{typ dat}` je jeden z následujících:
+Kde `<typ dat>` je jeden z následujících:
 - PARKING - data o využití zón
 - PARKING_PERMITS - data o vydaných parkovacích povoleních
 - PARKING_SPACES - data o parkovacích místech
@@ -44,32 +44,40 @@ python download.py PARKING --start-year 2020 --end-year 2023 --include-sections
 Pro přípravu dat je potřeba spustit skript `process.py`:
 
 ```bash
-python process.py
+python process.py <typ-dat>
 ```
 
 Je možné vybrat jen určitý typ dat, který se má zpracovat:
 
-- parking
-- permits
-- spaces
-- permits_spaces
-- all
-- useky_na_zsj
-- domy_na_useky
+- `parking` - využití parkovacích míst
+- `permits_spaces` - počty oprávnění a parkovacích míst
+- `permits` - vydaná oprávnění
+- `spaces` - počty parkovacích míst
+- `all` - všechna předchozí data
+
+Některé výstupy jsou podobné, respektive mají překryvy. Nejužitečnější jsou první dva.
+
+Navíc je možné zpracovat následující:
+
+- `useky_na_zsj` - mapování úseků na základní sídelní jednotky 
+- `domy_na_useky` - mapování domů na úseky
+
+Výsledné soubory těchto dvou skriptů jsou ale nahrané v projektu, takže pokud nedojde například k rozšíření zón, nemělo by být potřeba je spouštět.
 
 ## Analýza dat
 
 - `analysis.py` je rozpracovaný skript, který by měl sloužit k analýze dat
 
-# Co znamenají názvy souborů?
+# Co znamenají názvy zdrojových datových souborů?
 
 ### JS a JSON soubory
 
 .js soubory obsahují popis JSON souborů, které se načítají do mapy.
 
-Tyto soubory ale obsahují podobná data jako .tsv soubory, narozdíl od nich jsou ale rozděleny časově (den, noc atd.). Navzdory tomu, že popis v .js souboru odkaazuje na .tsv soubor, tak tyto soubory zřejmě nemohly být vygenerovány jen z .tsv soborů (právě proto, že v těch chybí časové rozdělení).
+JSON soubory obsahují podobná data jako .tsv soubory, narozdíl od nich jsou ale rozděleny časově (den, noc atd.). Navzdory tomu, že popis v .js souboru odkaazuje na .tsv soubor, tak tyto soubory zřejmě nemohly být vygenerovány jen z .tsv soborů (právě proto, že v těch chybí časové rozdělení).
 
 Název souborů se skládá z několika částí:
+
 - typ zobrazení v mapě (OB = Obsazenost, OR = Rezidenti, RE = Respektovanost) - různá zobrazení, ale stejná data
 - _
 - rok (2023)
