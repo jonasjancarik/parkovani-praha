@@ -3,6 +3,17 @@ import pandas as pd
 import json
 import sys
 from src import mapping, utils
+import logging
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Set up basic configuration for logging
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),  # default to INFO
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 AREA_TYPE = "useky"  # hardcoded - in future all resulting data should be based on zone-level data (useky)
 
@@ -30,16 +41,16 @@ def parse_arguments():
         display_help(valid_args.keys())
         sys.exit()
     else:
-        print(f"Invalid argument: {arg}")
+        logging.info(f"Invalid argument: {arg}")
         display_help(valid_args.keys())
         sys.exit(1)
 
 
 def display_help(valid_args):
-    print("Usage: python process.py [TYPE_OF_DATA]")
-    print("\nTYPE_OF_DATA can be one of the following:")
+    logging.info("Usage: python process.py [TYPE_OF_DATA]")
+    logging.info("\nTYPE_OF_DATA can be one of the following:")
     for arg in valid_args:
-        print(f"- {arg}")
+        logging.info(f"- {arg}")
 
 
 def process_parked_cars():
@@ -66,14 +77,14 @@ def process_parked_cars():
             area = parse_graph_data(feature, area)
             if not any(area[key] == "NaN" for key in area):
                 areas.append(area)
-            # else:  # todo: show debug log
-            #     if AREA_TYPE == "zsj":
-            #         print(f"Skipping area {area['NAZ_ZSJ']} due to missing data")
-            #     if AREA_TYPE == "useky":
-            #         print(f"Skipping area {area['CODE']} due to missing data")
-        print(f"-> {len(areas)}/{len(data['features'])} zones had data")
+            else:
+                logging.debug(
+                    f"Skipping area {area.get('NAZ_ZSJ', area.get('CODE'))} due to missing data"
+                )
+
+        logging.debug(f"-> {len(areas)}/{len(data['features'])} zones had data")
         if len(areas) == 0:
-            print("-> no areas in the file had data")
+            logging.debug("-> no areas in the file had data")
         return areas
 
     def parse_graph_data(feature, area):
@@ -268,7 +279,7 @@ def process_parked_cars():
             os.makedirs(processed_dir)
         output_file = os.path.join(processed_dir, f"data_{AREA_TYPE}.csv")
         df.to_csv(output_file, index=False, encoding="utf-8")
-        print("Data saved to:", output_file)
+        logging.info("Data saved to:", output_file)
 
     ####################################################
     # main part of the parked cars processing function #
@@ -290,7 +301,7 @@ def process_parked_cars():
     try:
         zones_to_areas_df = pd.read_csv("data/useky_zsj_mapping.csv")
     except Exception:  # todo: better exception handling
-        print("Run `process.py useky_na_zsj` first.")
+        logging.info("Run `process.py useky_na_zsj` first.")
         sys.exit(1)
 
     # make CODE column uppercase, we'll be using it to merge the dfs
@@ -304,13 +315,13 @@ def process_parked_cars():
     for counter, file in enumerate(files, start=1):
         file_path = os.path.join(data_dir, file)
 
-        print(f"Processing {file_path}")
+        logging.debug(f"Processing {file_path}")
 
         try:
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
         except json.decoder.JSONDecodeError:
-            print(f"Error while loading {file} (potentially missing data)")
+            logging.debug(f"Error while loading {file} (potentially missing data)")
             continue
 
         parked_cars_district = process_json_data(data)
@@ -322,25 +333,29 @@ def process_parked_cars():
                 parked_cars_district_df, file, zones_to_areas_df
             )
         else:
-            print(f"Skipping file {file} due to missing data")
+            logging.debug(f"Skipping file {file} due to missing data")
             continue
 
         # append this zone's data to the main dataframe
         parked_cars_all_df = pd.concat(
             [parked_cars_all_df, parked_cars_district_df], ignore_index=True
         )
-        print(f"Processed {counter} out of {len(files)} files")
+
+        if os.getenv("LOG_LEVEL", "INFO").upper() == "DEBUG":
+            logging.info(f"Processed {counter} out of {len(files)} files")
+        else:
+            print(f"\rProcessed {counter} out of {len(files)} files", end="")
 
     # rename columns to more readable names
     parked_cars_all_df = rename_and_calculate_columns(parked_cars_all_df)
 
     # export to CSV
-    print("Saving CSV...")
+    logging.info("Saving CSV...")
     save_to_csv(parked_cars_all_df, processed_dir)
 
 
 def process_permits():
-    print("Processing parking permit data...")
+    logging.info("Processing parking permit data...")
 
     df = utils.load_files_to_df("permits")
 
@@ -401,11 +416,11 @@ def process_permits():
     # save to csv
     df_final.to_csv("data/processed/data_parking_permits.csv", index=False)
 
-    print('Data saved to "data/processed/data_parking_permits.csv"')
+    logging.info('Data saved to "data/processed/data_parking_permits.csv"')
 
 
 def process_spaces():
-    print("Processing parking spaces data...")
+    logging.info("Processing parking spaces data...")
 
     df = utils.load_files_to_df("spaces")
 
@@ -442,7 +457,7 @@ def process_permits_and_spaces():
     # save to csv
     df.to_csv("data/processed/data_parking_permits_and_spaces.csv", index=False)
 
-    print('Data saved to "data/processed/data_parking_permits_and_spaces.csv"')
+    logging.info('Data saved to "data/processed/data_parking_permits_and_spaces.csv"')
 
 
 if __name__ == "__main__":
