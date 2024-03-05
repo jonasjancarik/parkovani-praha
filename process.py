@@ -245,7 +245,7 @@ def process_parked_cars():
     def save_to_csv(df, processed_dir):
         if not os.path.exists(processed_dir):
             os.makedirs(processed_dir)
-        output_file = os.path.join(processed_dir, "data_useky.csv")
+        output_file = os.path.join(processed_dir, "data_parking.csv")
         df.to_csv(output_file, index=False, encoding="utf-8")
         logging.info("Data saved to:", output_file)
 
