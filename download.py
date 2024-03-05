@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import datetime
 import sys
 import argparse
+from dateutil.relativedelta import relativedelta
 
 load_dotenv()
 USER = os.getenv("TSK_USERNAME")
@@ -11,9 +12,10 @@ PASSWORD = os.getenv("TSK_PASSWORD")
 
 parser = argparse.ArgumentParser(description="Download data for parking in Prague.")
 parser.add_argument(
-    "type_of_data",
+    "--type_of_data",
     choices=["PARKING", "PARKING_PERMITS", "PARKING_SPACES", "HOUSES"],
     help="Type of data to download",
+    default=None,
 )
 parser.add_argument(
     "--start_year",
@@ -34,8 +36,6 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
-
-TYPE_OF_DATA = args.type_of_data
 
 # build list of years to download data for
 # if start_year is greater than end_year, print error message and exit
@@ -63,9 +63,6 @@ if args.end_year == datetime.datetime.now().year:
 else:
     END_MONTH = 12
 
-INCLUDE_QUARTERLY = args.include_quarterly
-INCLUDE_SECTIONS = args.include_sections
-
 districts = [
     "P01",
     "P02",
@@ -83,6 +80,10 @@ districts = [
     "P22",
 ]
 
+if not args.type_of_data:
+    # will download all
+    print("Downloading all types of data")
+
 
 def session_setup(session):
     session.auth = (USER, PASSWORD)
@@ -90,7 +91,9 @@ def session_setup(session):
     return session
 
 
-if TYPE_OF_DATA == "PARKING":
+if not args.type_of_data or args.type_of_data == "PARKING":
+    print("Downloading parking data...")
+
     filename_templates = [
         "OB_YYYYMMD_NA.json",
         "OB_YYYYMMN_NA.json",
@@ -156,13 +159,22 @@ if TYPE_OF_DATA == "PARKING":
                 # build date object
                 date = datetime.datetime(year, month, 1)
 
-                # Check if the date is in the previous month or newer
-                if date > datetime.datetime.now() - datetime.timedelta(days=30):
-                    # If the year and month are current or future, don't add to skip list
+                # Get today's date
+                today = datetime.datetime.now()
+
+                # Calculate the start of the current month
+                start_of_current_month = today.replace(
+                    day=1, hour=0, minute=0, second=0, microsecond=0
+                )
+
+                # Calculate the start of the month two months ago
+                two_months_ago = start_of_current_month - relativedelta(months=2)
+
+                # Check if the date is within the previous two calendar months
+                if date >= two_months_ago:
                     print(
-                        "-> File missing, but it's too new so it might be added later."
+                        "-> File missing, but it's within the current or previous two calendar months so it might be added later."
                     )
-                    continue
                 else:
                     # Add to skip list
                     skip.append(f"{filename}")
@@ -181,7 +193,9 @@ if TYPE_OF_DATA == "PARKING":
 
     print("Done")
 
-elif TYPE_OF_DATA == "PARKING_PERMITS":
+if not args.type_of_data or args.type_of_data == "PARKING_PERMITS":
+    print("Downloading parking permits data...")
+
     index_url = "https://zps.tsk-praha.cz/geodata/stats/POP/"
 
     # create directory if it does not exist
@@ -243,7 +257,9 @@ elif TYPE_OF_DATA == "PARKING_PERMITS":
     print("\nDone")
 
 
-if TYPE_OF_DATA == "PARKING_SPACES":
+if not args.type_of_data or args.type_of_data == "PARKING_SPACES":
+    print("Downloading parking spaces data...")
+
     # the URLs look like this: https://zps.tsk-praha.cz/geodata/stats/PM/P00-202401PM2.tsv
     # let's cycle through the years and months and download the data
     # the data is in the form of a tab-separated file
@@ -302,7 +318,8 @@ if TYPE_OF_DATA == "PARKING_SPACES":
 
     print("\nDone")
 
-if TYPE_OF_DATA == "HOUSES":
+if not not args.type_of_data or args.type_of_data == "HOUSES":
+    print("Downloading houses data...")
     # the URLs look like this: https://zps.tsk-praha.cz/puzzle/genmaps/PO_201801M_TR.json
     # let's cycle through the years and months and download the data
     # the data is in the form of a JSON file
