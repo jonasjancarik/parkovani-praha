@@ -22,6 +22,7 @@ def parse_arguments():
         "PERMITS": process_permits,
         "SPACES": process_spaces,
         "PERMITS_SPACES": process_permits_and_spaces,
+        "PERMITS_ZONES": process_permits_from_houses,
         "ALL": lambda: [
             process_parked_cars(),
             process_permits(),
@@ -51,66 +52,79 @@ def display_help(valid_args):
         logging.info(f"- {arg}")
 
 
-def process_parked_cars():
-    def process_json_data(data):
-        areas = []
+def process_json_data(data):
+    areas = []
 
-        for feature in data["features"]:
-            # Filtering properties
-            area = {
-                key: value
-                for key, value in feature["properties"].items()
-                if key
-                not in {
-                    "GraphData",
-                    "GraphLegend",
-                    "GraphData2",
-                    "GraphLegend2",
-                    "fill",
-                    "stroke",
-                    "stroke-width",
-                    "opacity",
-                    "r",
-                }
+    for feature in data["features"]:
+        # Filtering properties
+        area = {
+            key: value
+            for key, value in feature["properties"].items()
+            if key
+            not in {
+                "GraphData",
+                "GraphLegend",
+                "GraphData2",
+                "GraphLegend2",
+                "fill",
+                "stroke",
+                "stroke-width",
+                "opacity",
+                "r",
             }
+        }
 
-            # Parsing graph data
-            nan_found = False
-            for label_suffix in ["", "2"]:
-                graph_data_key = f"GraphData{label_suffix}"
-                graph_legend_key = f"GraphLegend{label_suffix}"
-                graph_data = (
-                    feature["properties"].get(graph_data_key, "").strip("[]").split(",")
-                )
-                graph_legend = (
-                    feature["properties"]
-                    .get(graph_legend_key, "")
-                    .strip("[]")
-                    .split(",")
-                )
+        # Parsing graph data
+        nan_found = False
 
-                for legend, datapoint in zip(graph_legend, graph_data):
-                    try:
-                        area[legend] = int(datapoint)
-                    except ValueError:
-                        area[legend] = datapoint
-                        if datapoint == "NaN":
-                            nan_found = True
-                            break  # No need to parse further if NaN is found
+        # count how many keys there are which start with GraphData in data['features'][0]['properties']
+        graphdata_key_count = len(
+            data["features"][0]["properties"].keys() & {"GraphData", "GraphData2"}
+        )
 
-                if nan_found:
-                    break  # Exit outer loop as well if NaN is found
-
-            if not nan_found:
-                areas.append(area)
-
-        if len(areas):
-            logging.debug(f"-> {len(areas)}/{len(data['features'])} zones had data")
+        if graphdata_key_count == 1:
+            label_suffixes = [""]
+        elif graphdata_key_count == 2:
+            label_suffixes = ["", "2"]
         else:
-            logging.debug("-> no areas in the file had data")
+            sys.exit(
+                "Error: The number of keys starting with GraphData in the JSON file is neither 1 nor 2."
+            )  # todo: handle this better
 
-        return areas
+        for label_suffix in label_suffixes:
+            graph_data_key = f"GraphData{label_suffix}"
+            graph_legend_key = f"GraphLegend{label_suffix}"
+            graph_data = (
+                feature["properties"].get(graph_data_key, "").strip("[]").split(",")
+            )
+            graph_legend = (
+                feature["properties"].get(graph_legend_key, "").strip("[]").split(",")
+            )
 
+            for legend, datapoint in zip(graph_legend, graph_data):
+                try:
+                    area[legend] = int(datapoint)
+                except ValueError:
+                    area[legend] = datapoint
+                    if datapoint == "NaN":
+                        nan_found = True
+                        break  # No need to parse further if NaN is found
+
+            if nan_found:
+                break  # Exit outer loop as well if NaN is found
+
+        if not nan_found:
+            areas.append(area)
+
+    if len(areas):
+        logging.debug(f"-> {len(areas)}/{len(data['features'])} zones had data")
+    else:
+        logging.debug("-> no areas in the file had data")
+
+    return areas
+
+
+def process_parked_cars():
     def enrich_dataframe(df, file, zones_to_areas_df):
         # parse time period code
         time_period = {
@@ -136,19 +150,7 @@ def process_parked_cars():
         df["filename"] = file
 
         # add date column
-        # filenames look like P01-OB_202311D_NA.json, where 202311 is the year and month
-        # - extract the year and month from the filename and use the last day of the month
-        year_and_month = file.split("_")[1][:6]
-        year = year_and_month[:4]
-        month = year_and_month[4:]
-        date = pd.to_datetime(f"{year}-{month}-01") + pd.offsets.MonthEnd(0)
-        df["date"] = date
-
-        # add frekvence column, wich is monthly or quarterly, based on whether the filename contains _N for monthly or _Q for quarterly
-        if "_N" in file:
-            df["frekvence"] = "měsíční"
-        if "_Q" in file:
-            df["frekvence"] = "čtvrtletní"
+        df["date"] = utils.get_date_from_filename(file)
 
         return df
 
@@ -213,7 +215,6 @@ def process_parked_cars():
                     "parkovacich_mist_celkem",
                     "parkovacich_mist_v_zps",
                     "date",
-                    "frekvence",
                     "kod_zsj",
                     "naz_zsj",
                     "code",
@@ -386,9 +387,9 @@ def process_permits():
     df_final = df_final[columns]
 
     # save to csv
-    df_final.to_csv("data/processed/data_parking_permits.csv", index=False)
+    df_final.to_csv("data/processed/data_permits.csv", index=False)
 
-    logging.info('Data saved to "data/processed/data_parking_permits.csv"')
+    logging.info('Data saved to "data/processed/data_permits.csv"')
 
 
 def process_spaces():
@@ -403,7 +404,7 @@ def process_spaces():
     df.drop(columns=["Season"], inplace=True)
 
     # save to csv
-    df.to_csv("data/processed/data_parking_spaces.csv", index=False)
+    df.to_csv("data/processed/data_spaces.csv", index=False)
 
 
 def process_permits_and_spaces():
@@ -420,10 +421,10 @@ def process_permits_and_spaces():
     # Now we will merge the two datasets
 
     # load permits data from processed CSV
-    df_permits = pd.read_csv("data/processed/data_parking_permits.csv")
+    df_permits = pd.read_csv("data/processed/data_permits.csv")
 
     # load spaces data
-    df_spaces = pd.read_csv("data/processed/data_parking_spaces.csv")
+    df_spaces = pd.read_csv("data/processed/data_spaces.csv")
 
     # rename MC in spaces data to Oblast
     df_spaces.rename(columns={"MC": "Oblast"}, inplace=True)
@@ -441,9 +442,71 @@ def process_permits_and_spaces():
     df.drop(columns=["parent district"], inplace=True)
 
     # save to csv
-    df.to_csv("data/processed/data_parking_permits_and_spaces.csv", index=False)
+    df.to_csv("data/processed/data_permits_and_spaces.csv", index=False)
 
-    logging.info('Data saved to "data/processed/data_parking_permits_and_spaces.csv"')
+    logging.info('Data saved to "data/processed/data_permits_and_spaces.csv"')
+
+
+def process_permits_from_houses():
+    # will create a "permits per zone" file
+
+    # load the data
+
+    # read each JSON file in data/downloaded/houses and run it through the process_json_data function
+    # append the results to a list
+    data_dir = "data/downloaded/houses"
+    files = os.listdir(data_dir)
+    permits_all_df = pd.DataFrame()
+
+    for counter, file in enumerate(files, start=1):
+        file_path = os.path.join(data_dir, file)
+
+        logging.debug(f"Processing {file_path}")
+
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except json.decoder.JSONDecodeError:
+            logging.debug(f"Error while loading {file} (potentially missing data)")
+            continue
+
+        permits = process_json_data(data)
+        permits_df = pd.DataFrame(permits)
+        permits_df["date"] = utils.get_date_from_filename(file)
+        permits_all_df = pd.concat([permits_all_df, permits_df], ignore_index=True)
+
+        logging.info(f"Processed {counter} out of {len(files)} files")
+
+    # load the mapping of houses to zones
+    try:
+        houses_to_zones_df = pd.read_csv("data/houses_useky_mapping.csv")
+    except Exception:  # todo: better exception handling
+        logging.info("Run `process.py domy_na_useky` first.")
+        sys.exit(1)
+
+    # rename CODE to house_code
+    permits_all_df.rename(columns={"CODE": "house_code"}, inplace=True)
+
+    # join the two dataframes on 'code'
+    permits_all_df["house_code"] = permits_all_df["house_code"].astype("int64")
+    permits_all_df = permits_all_df.merge(houses_to_zones_df, on="house_code")
+
+    # group by date and usek_code and sum the values
+    permits_all_df = permits_all_df.groupby(["date", "usek_code"]).sum().reset_index()
+
+    # rename XSUM to POP_CELKEM
+    permits_all_df.rename(columns={"XSUM": "POP_CELKEM"}, inplace=True)
+
+    # drop the house_code column
+    permits_all_df.drop(columns=["house_code"], inplace=True)
+
+    # rename usek_code to kod_useku
+    permits_all_df.rename(columns={"usek_code": "kod_useku"}, inplace=True)
+
+    # save to csv
+    permits_all_df.to_csv("data/processed/data_permits_by_zone.csv", index=False)
+
+    logging.info('Data saved to "data/processed/data_permits_by_zone.csv"')
 
 
 if __name__ == "__main__":

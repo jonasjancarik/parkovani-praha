@@ -18,6 +18,16 @@ def load_files_to_df(category):
     return df
 
 
+def get_date_from_filename(filename):
+    # filenames look like P01-OB_202311D_NA.json, where 202311 is the year and month
+    # - extract the year and month from the filename and use the last day of the month
+    year_and_month = filename.split("_")[1][:6]
+    year = year_and_month[:4]
+    month = year_and_month[4:]
+    date = pd.to_datetime(f"{year}-{month}-01") + pd.offsets.MonthEnd(0)
+    return date
+
+
 def add_leading_zero_to_district(df, column):
     """
     Add leading zeros to district numbers.
