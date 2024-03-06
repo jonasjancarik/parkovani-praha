@@ -233,9 +233,7 @@ def process_parked_cars():
         absolute_columns = percent_columns
 
         # calculate absolute values for percentage columns by multiplying by parkovacich_mist_celkem
-        df[absolute_columns] = df[
-            percent_columns_with_affix
-        ].multiply(
+        df[absolute_columns] = df[percent_columns_with_affix].multiply(
             df["parkovacich_mist_celkem"],
             axis="index",  # todo!: find out whether "parkovacich mist v zps" should be used instead
         )
@@ -252,7 +250,7 @@ def process_parked_cars():
             os.makedirs(processed_dir)
         output_file = os.path.join(processed_dir, "data_parking.csv")
         df.to_csv(output_file, index=False, encoding="utf-8")
-        logging.info("Data saved to:", output_file)
+        logging.info(f"Data saved to: {output_file}")
 
     ####################################################
     # main part of the parked cars processing function #
