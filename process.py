@@ -59,7 +59,7 @@ def process_parked_cars():
                 key: value
                 for key, value in feature["properties"].items()
                 if key
-                not in [
+                not in {
                     "GraphData",
                     "GraphLegend",
                     "GraphData2",
@@ -69,7 +69,7 @@ def process_parked_cars():
                     "stroke-width",
                     "opacity",
                     "r",
-                ]
+                }
             }
 
             area = parse_graph_data(feature, area)
@@ -187,7 +187,7 @@ def process_parked_cars():
             df["navstevnici_platici"] + df["navstevnici_neplatici"] + df["prenosna"]
         )
 
-        # calculate kontrola - RT_R + RT_V + RT_A + RT_P + RT_C + RT_E + RT_O + RT_S + R_VIS + NR + Free
+        # calculate sum of all types - RT_R + RT_V + RT_A + RT_P + RT_C + RT_E + RT_O + RT_S + R_VIS + NR + Free
         df["soucet_vsech_typu"] = (
             df["rezidentska"]
             + df["vlastnicka"]
@@ -234,8 +234,11 @@ def process_parked_cars():
         absolute_columns = percent_columns
 
         # calculate absolute values for percentage columns by multiplying by parkovacich_mist_celkem
-        df[absolute_columns] = df[percent_columns_with_affix].multiply(
-            df["parkovacich_mist_celkem"], axis="index"
+        df[absolute_columns] = df[
+            percent_columns_with_affix
+        ].multiply(
+            df["parkovacich_mist_celkem"],
+            axis="index",  # todo!: find out whether "parkovacich mist v zps" should be used instead
         )
 
         df["mestska_cast"] = utils.add_leading_zero_to_district(df, "mestska_cast")
@@ -407,6 +410,14 @@ def process_permits_and_spaces():
     Produces a combined file with permits and spaces data.
     """
 
+    # process permits
+    process_permits()
+
+    # process spaces
+    process_spaces()
+
+    # Now we will merge the two datasets
+
     # load permits data from processed CSV
     df_permits = pd.read_csv("data/processed/data_parking_permits.csv")
 
@@ -421,6 +432,12 @@ def process_permits_and_spaces():
 
     # drop rows where Oblast contains a dot
     df = df[~df["Oblast"].str.contains(r"\.")]
+
+    # Rename Oblast to mestska_cast and XSUM to POP_CELKEM
+    df.rename(columns={"Oblast": "mestska_cast", "XSUM": "POP_CELKEM"}, inplace=True)
+
+    # drop column parent district
+    df.drop(columns=["parent district"], inplace=True)
 
     # save to csv
     df.to_csv("data/processed/data_parking_permits_and_spaces.csv", index=False)
