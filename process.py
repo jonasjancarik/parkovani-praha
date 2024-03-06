@@ -72,45 +72,33 @@ def process_parked_cars():
                 }
             }
 
-            area = parse_graph_data(feature, area)
-            if not any(area[key] == "NaN" for key in area):
-                areas.append(area)
-            else:
-                logging.debug(
-                    f"Skipping area {area.get('NAZ_ZSJ', area.get('CODE'))} due to missing data"
+            # parse graph data
+            for label_suffix in ["", "2"]:
+                graph_data_key = f"GraphData{label_suffix}"
+                graph_legend_key = f"GraphLegend{label_suffix}"
+                graph_data = (
+                    feature["properties"].get(graph_data_key, "").strip("[]").split(",")
                 )
+                graph_legend = (
+                    feature["properties"]
+                    .get(graph_legend_key, "")
+                    .strip("[]")
+                    .split(",")
+                )
+
+                for legend, datapoint in zip(graph_legend, graph_data):
+                    try:
+                        area[legend] = int(datapoint)
+                    except ValueError:
+                        area[legend] = datapoint
+
+            if not any(value == "NaN" for value in area.values()):
+                areas.append(area)
 
         logging.debug(f"-> {len(areas)}/{len(data['features'])} zones had data")
         if len(areas) == 0:
             logging.debug("-> no areas in the file had data")
         return areas
-
-    def parse_graph_data(feature, area):
-        updated_area = area.copy()
-        for label_suffix in ["", "2"]:
-            graph_data_key = f"GraphData{label_suffix}"
-            graph_legend_key = f"GraphLegend{label_suffix}"
-            graph_data = (
-                feature["properties"]
-                .get(graph_data_key, "")
-                .replace("[", "")
-                .replace("]", "")
-                .split(",")
-            )
-            graph_legend = (
-                feature["properties"]
-                .get(graph_legend_key, "")
-                .replace("[", "")
-                .replace("]", "")
-                .split(",")
-            )
-
-            for i, datapoint in enumerate(graph_data):
-                try:
-                    updated_area[graph_legend[i]] = int(datapoint)
-                except ValueError:
-                    updated_area[graph_legend[i]] = datapoint
-        return updated_area
 
     def enrich_dataframe(df, file, zones_to_areas_df):
         # parse time period code
@@ -241,6 +229,9 @@ def process_parked_cars():
             axis="index",  # todo!: find out whether "parkovacich mist v zps" should be used instead
         )
 
+        # now drop all the _pct columns as we won't need them anymore
+        df.drop(columns=percent_columns_with_affix, inplace=True)
+
         df["mestska_cast"] = utils.add_leading_zero_to_district(df, "mestska_cast")
 
         return df
@@ -276,7 +267,8 @@ def process_parked_cars():
         sys.exit(1)
 
     # make CODE column uppercase, we'll be using it to merge the dfs
-    zones_to_areas_df["CODE"] = zones_to_areas_df["code"]
+    if "CODE" not in zones_to_areas_df.columns:
+        zones_to_areas_df.rename(columns={"code": "CODE"}, inplace=True)
 
     # Processing
 
