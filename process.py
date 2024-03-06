@@ -54,7 +54,9 @@ def display_help(valid_args):
 def process_parked_cars():
     def process_json_data(data):
         areas = []
+
         for feature in data["features"]:
+            # Filtering properties
             area = {
                 key: value
                 for key, value in feature["properties"].items()
@@ -72,7 +74,8 @@ def process_parked_cars():
                 }
             }
 
-            # parse graph data
+            # Parsing graph data
+            nan_found = False
             for label_suffix in ["", "2"]:
                 graph_data_key = f"GraphData{label_suffix}"
                 graph_legend_key = f"GraphLegend{label_suffix}"
@@ -91,13 +94,21 @@ def process_parked_cars():
                         area[legend] = int(datapoint)
                     except ValueError:
                         area[legend] = datapoint
+                        if datapoint == "NaN":
+                            nan_found = True
+                            break  # No need to parse further if NaN is found
 
-            if not any(value == "NaN" for value in area.values()):
+                if nan_found:
+                    break  # Exit outer loop as well if NaN is found
+
+            if not nan_found:
                 areas.append(area)
 
-        logging.debug(f"-> {len(areas)}/{len(data['features'])} zones had data")
-        if len(areas) == 0:
+        if len(areas):
+            logging.debug(f"-> {len(areas)}/{len(data['features'])} zones had data")
+        else:
             logging.debug("-> no areas in the file had data")
+
         return areas
 
     def enrich_dataframe(df, file, zones_to_areas_df):
