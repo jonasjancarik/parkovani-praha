@@ -23,11 +23,12 @@ def parse_arguments():
         "SPACES": process_spaces,
         "PERMITS_SPACES": process_permits_and_spaces,
         "PERMITS_ZONES": process_permits_from_houses,
-        "ALL": lambda: [
+        "ALL": lambda: [  # todo: unclear that this won't process mapping zones and houses to areas
             process_parked_cars(),
             process_permits(),
             process_spaces(),
             process_permits_and_spaces(),
+            process_permits_from_houses(),
         ],
         "USEKY_NA_ZSJ": mapping.map_useky_to_zsj,
         "DOMY_NA_USEKY": mapping.map_houses_to_useky,
@@ -135,7 +136,7 @@ def process_parked_cars():
             "W_": "Po-Pá",
             "X_": "So-Ne",
         }
-        df["část dne"] = next(
+        df["cast_dne"] = next(
             (time_period[key] for key in time_period if key in file), "Unknown"
         )
 
@@ -176,10 +177,9 @@ def process_parked_cars():
             "Resp": "respektovanost",
             "Obs": "obsazenost",
             "ResPct": "rezidenti_do_500m",
+            "CODE": "kod_useku",
+            "CATEGORY": "typ_zony",
         }
-
-        new_column_names["CODE"] = "kod_useku"
-        new_column_names["CATEGORY"] = "kategorie"
 
         df.rename(columns=new_column_names, inplace=True)
 
@@ -209,15 +209,17 @@ def process_parked_cars():
                 [
                     "filename",
                     "mestska_cast",
-                    "část dne",
+                    "cast_dne",  # todo: make consistent with other column names
                     "kod_useku",
-                    "kategorie",
+                    "typ_zony",
                     "parkovacich_mist_celkem",
                     "parkovacich_mist_v_zps",
                     "date",
                     "kod_zsj",
                     "naz_zsj",
                     "code",
+                    "obsazenost",
+                    "respektovanost",
                 ]
             )
         )
@@ -242,7 +244,55 @@ def process_parked_cars():
         # now drop all the _pct columns as we won't need them anymore
         df.drop(columns=percent_columns_with_affix, inplace=True)
 
+        # process numbers for obsazenost and respektovanost, which are also percentages (but we'll keep them as percentages)
+        df["obsazenost"] = df["obsazenost"] / 100
+        df["respektovanost"] = df["respektovanost"] / 100
+
+        # as a check, print the value of obsazenost for the row where kod useku is P1-0165 and filename is P01-OB_202001D_NA.json
+        print(
+            df[
+                (df["kod_useku"] == "P1-0165")
+                & (df["filename"] == "P01-OB_202001D_NA.json")
+            ]["obsazenost"]
+        )
+
+        # add leading zero to district
         df["mestska_cast"] = utils.add_leading_zero_to_district(df, "mestska_cast")
+
+        column_order = [
+            "kod_useku",
+            "kod_zsj",
+            "naz_zsj",
+            "mestska_cast",
+            "typ_zony",
+            "cast_dne",
+            "date",
+            "filename",
+            "parkovacich_mist_celkem",
+            "parkovacich_mist_v_zps",
+            "rezidenti_do_500m",
+            "rezidenti_do_125m",
+            "rezidenti_od_126m_do_500m",
+            "rezidenti_od_501m_do_2000m",
+            "rezidenti_nad_2000m",
+            "obsazenost",
+            "respektovanost",
+            "abonentska",
+            "carsharing",
+            "ekologicka",
+            "navstevnici",
+            "navstevnici_neplatici",
+            "navstevnici_platici",
+            "ostatni",
+            "prenosna",
+            "rezidentska",
+            "socialni",
+            "vlastnicka",
+            "soucet_vsech_typu",
+            "volna_mista",
+        ]
+
+        df = df[column_order]
 
         return df
 
@@ -318,6 +368,9 @@ def process_parked_cars():
             logging.info(f"Processed {counter} out of {len(files)} files")
         else:
             print(f"\rProcessed {counter} out of {len(files)} files", end="")
+
+    if os.getenv("LOG_LEVEL", "INFO").upper() != "DEBUG":
+        print("")  # print newline after the progress counter
 
     # rename columns to more readable names
     parked_cars_all_df = rename_and_calculate_columns(parked_cars_all_df)
@@ -502,6 +555,22 @@ def process_permits_from_houses():
 
     # rename usek_code to kod_useku
     permits_all_df.rename(columns={"usek_code": "kod_useku"}, inplace=True)
+
+    # rename
+    permits_all_df.rename(
+        columns={
+            "XSUM": "pop_celkem",
+            "R": "pop_rezidentska",
+            "V": "pop_vlastnicka",
+            "A": "pop_abonentska",
+            "P": "pop_prenosna",
+            "C": "pop_carsharing",
+            "E": "pop_ekologicka",
+            "O": "pop_ostatni",
+            "S": "pop_socialni",
+        },
+        inplace=True,
+    )
 
     # save to csv
     permits_all_df.to_csv("data/processed/data_permits_by_zone.csv", index=False)
