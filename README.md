@@ -64,6 +64,46 @@ Výsledné soubory těchto dvou skriptů jsou ale nahrané v projektu, takže po
 
 - `analysis.py` je rozpracovaný skript, který by měl sloužit k analýze dat
 
+# Slovník zkratek
+
+## Parkovací oprávnění (POP)
+
+- **R** Rezidentská
+- **V** Vlastnická
+- **A** Abonentská
+- **P** Přenosná
+- **C** Carsharing
+- **E** Ekologická
+- **O** Ostatní
+- **S** Sociální
+
+kde:
+- **E** Zahrnuje hodnoty:
+  - Ekologická
+  - Elektromobil-abonent
+  - Elektromobil-ostatní
+  - Elektromobil-rezident
+  - Hybrid-abonent
+  - Hybrid-ostatní
+  - Hybrid-rezident
+  - Osvobozená
+- **O** Zahrnuje hodnoty:
+  - Ostatní
+  - Bezpečnostní složky
+  - Integrovaný záchranný systém
+  - MHMP
+  - Speciální Zastupitelská
+  - Zastupitelská
+  - Zastupitelská-přenosná
+  - Zastupitelská-přenosná-senior
+- **S** Zahrnuje hodnoty:
+  - Seniorská/ZTP
+  - Pečovatelská / ZTP
+  - ZTP
+  - Pečovatelská původní
+  - Pečovatelská
+  - Sociální služby
+
 # Co znamenají názvy zdrojových datových souborů?
 
 ### JS a JSON soubory
@@ -102,28 +142,20 @@ TW_202201X_7A.tsv
 
 Protože nás nezajímá zobrazení v mapě, ale pouze data, tak budeme používat jen jeden typ souborů - arbitrárně volíme soubory začínající OB_.
 
+Nepotřebujeme agregovaná čtvrtletní data, protože máme měsíční data. Soubory s _Q tedy také nebudeme používat.
+
 Relevantní datové soubory pro jeden měsíc tedy vypadají takto:
 
 - OB_202311D_NA.json
 - OB_202311D_NJ.json
-- OB_202311D_QA.json
-- OB_202311D_QJ.json
 - OB_202311N_NA.json
 - OB_202311N_NJ.json
-- OB_202311N_QA.json
-- OB_202311N_QJ.json
 - OB_202311P_NA.json
 - OB_202311P_NJ.json 
-- OB_202311S_QA.json (možná není generován)
-- OB_202311S_QJ.json (možná není generován)
 
 některé městské části mají navíc soubory W a X, tedy měly by existovat i:
 
 - OB_202311W_NA.json
 - OB_202311W_NJ.json
-- OB_202311W_QA.json
-- OB_202311W_QJ.json
 - OB_202311X_NA.json
 - OB_202311X_NJ.json
-- OB_202311X_QA.json
-- OB_202311X_QJ.json
