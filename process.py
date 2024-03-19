@@ -5,6 +5,7 @@ import sys
 from src import mapping, utils
 import logging
 from dotenv import load_dotenv
+import zipfile
 
 # Load environment variables
 load_dotenv()
@@ -302,6 +303,17 @@ def process_parked_cars():
         output_file = os.path.join(processed_dir, "data_parking.csv")
         df.to_csv(output_file, index=False, encoding="utf-8")
         logging.info(f"Data saved to: {output_file}")
+
+        # compress the file with zipfile
+        try:
+            logging.info("Compressing data...")
+            with zipfile.ZipFile(
+                output_file + ".zip", "w", zipfile.ZIP_DEFLATED
+            ) as zipf:
+                zipf.write(output_file, os.path.basename(output_file))
+            logging.info(f"Data compressed to: {output_file}.zip")
+        except Exception as e:
+            logging.error(f"Error while compressing the file: {e}")
 
     ####################################################
     # main part of the parked cars processing function #
