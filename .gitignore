@@ -1,5 +1,6 @@
 .vscode
 data/downloaded/houses
+data/processed/data_parking.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
