@@ -184,6 +184,11 @@ if not args.type_of_data or args.type_of_data == "PARKING":
                     continue
             else:
                 r = s.get(url)
+
+            if not r.text:
+                # empty file
+                continue
+
             with open(
                 f"data/downloaded/parked_cars/{filename}", "w", encoding="utf-8"
             ) as f:
@@ -246,6 +251,10 @@ if not args.type_of_data or args.type_of_data == "PARKING_PERMITS":
                 continue
             else:
                 r = s.get(url)
+
+            if not r.text:
+                # empty file
+                continue
 
             with open(
                 f"data/downloaded/permits/{filename}", "w", encoding="utf-8"
@@ -311,6 +320,10 @@ if not args.type_of_data or args.type_of_data == "PARKING_SPACES":
             else:
                 r = s.get(url)
 
+            if not r.text:
+                # empty file
+                continue
+
             with open(f"data/downloaded/spaces/{filename}", "w", encoding="utf-8") as f:
                 f.write(r.text)
 
@@ -371,6 +384,10 @@ if not not args.type_of_data or args.type_of_data == "HOUSES":
                 continue
             else:
                 r = s.get(url)
+
+            if not r.text:
+                # empty file
+                continue
 
             with open(f"data/downloaded/houses/{filename}", "w", encoding="utf-8") as f:
                 f.write(r.text)
