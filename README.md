@@ -59,7 +59,7 @@ Pro přípravu dat je potřeba spustit skript `process.py`:
 python process.py
 ```
 
-Pro vytvoření souboru, který kombinuje data o využití parkovacích míst a data o vydaných povoleních:
+Pro vytvoření souboru `data_parking_and_permits.csv`, který kombinuje data o využití parkovacích míst a data o vydaných povoleních:
 
 ```bash
 python join.py
