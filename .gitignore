@@ -1,6 +1,7 @@
 .vscode
 data/downloaded/houses
 data/processed/data_parking.csv
+.ignore*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
