@@ -1,7 +1,5 @@
 # parkovani-praha
 
-# Použití
-
 ## Instalace
 
 ```bash
@@ -10,7 +8,25 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Stažení dat
+## Použití
+
+Snažím se data v projektu průběžně aktualizovat. Pro získání souborů pro analýzu by mělo stačit následující:
+
+- extrahovat soubor `data/processed/data_parking.csv.zip` do stejného adresáře;
+- spustit `python join.py` pro vytvoření souboru `data_parking_and_permits.csv` tamtéž.
+
+Přehled datových souborů:
+
+- **`data_parking_and_permits.csv`** - data o jednotlivých zónách - jejich využití (parkování) a počty vydaných parkovacích povolení pro adresy, které k nim přisluší
+- `data_parking.csv` - data o jednotlivých zónách - jejich využití (parkování)
+- `data_permits_by_zone.csv` - data o počtech vydaných parkovacích povolení podle jednotlivých zón (úseků)
+- `data_permits.csv` - data o počtech vydaných parkovacích povolení podle jednotlivých městských částí
+- `data_spaces.csv` - data o počtech parkovacích míst podle jednotlivých městských částí
+- `data_permits_and_spaces.csv` - kombinace předchozích dvou souborů
+
+## Aktualizace dat
+
+### Stažení dat
 
 Pro stažení dat je potřeba spustit skript `download.py`:
 
@@ -35,15 +51,27 @@ Typy dat jsou:
 
 Pro správný běh přípravy dat je každopádně dobré stáhnout všechny typy dat.
 
-## Příprava dat
+### Příprava dat
 
 Pro přípravu dat je potřeba spustit skript `process.py`:
 
 ```bash
-python process.py <typ-dat>
+python process.py
 ```
 
-Je možné vybrat jen určitý typ dat, který se má zpracovat:
+Pro vytvoření souboru, který kombinuje data o využití parkovacích míst a data o vydaných povoleních:
+
+```bash
+python join.py
+```
+
+#### Podrobnější nastavení
+
+Je také  možné vybrat jen určitý typ dat, který se má zpracovat:
+
+```bash
+python process.py <typ-dat>
+```
 
 - `parking` - využití parkovacích míst
 - `permits_spaces` - počty oprávnění a parkovacích míst
@@ -53,7 +81,7 @@ Je možné vybrat jen určitý typ dat, který se má zpracovat:
 
 Některé výstupy jsou podobné, respektive mají překryvy. Nejužitečnější jsou první dva.
 
-Navíc je možné zpracovat následující:
+Navíc je možné zpracovat následující podkladové soubory:
 
 - `useky_na_zsj` - mapování úseků na základní sídelní jednotky 
 - `domy_na_useky` - mapování domů na úseky
@@ -62,7 +90,7 @@ Výsledné soubory těchto dvou skriptů jsou ale nahrané v projektu, takže po
 
 ## Analýza dat
 
-- `analysis.py` je rozpracovaný skript, který by měl sloužit k analýze dat
+- `analysis.py` je rozpracovaný skript, který by měl sloužit k analýze
 
 # Slovník zkratek
 
