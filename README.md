@@ -1,5 +1,7 @@
 # parkovani-praha
 
+Sada skriptů a dat pro analýzu parkování v Praze. Data jsou získána z [portálu TSK](https://zps.tsk-praha.cz/) k zónám placeného stání (ZPS).
+
 ## Instalace
 
 ```bash
@@ -28,7 +30,9 @@ Přehled datových souborů:
 
 ### Stažení dat
 
-Pro stažení dat je potřeba spustit skript `download.py`:
+Pro stažení dat je potřeba mít přístupové údaje k portálu TSK. Ty je potřeba zadat do souboru `.env`. Použijte `.env.example` jako vzor.
+
+Samotné stažení obstárává skript `download.py`:
 
 ```bash
 python download.py
