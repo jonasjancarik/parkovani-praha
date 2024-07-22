@@ -85,7 +85,7 @@ python process.py <typ-dat>
 
 Některé výstupy jsou podobné, respektive mají překryvy. Nejužitečnější jsou první dva.
 
-Navíc je možné zpracovat následující podkladové soubory:
+Navíc je možné zpracovat následující podkladové soubory, které nespadají pod `all`:
 
 - `useky_na_zsj` - mapování úseků na základní sídelní jednotky 
 - `domy_na_useky` - mapování domů na úseky
@@ -142,7 +142,7 @@ kde:
 
 .js soubory obsahují popis JSON souborů, které se načítají do mapy.
 
-JSON soubory obsahují podobná data jako .tsv soubory, narozdíl od nich jsou ale rozděleny časově (den, noc atd.). Navzdory tomu, že popis v .js souboru odkaazuje na .tsv soubor, tak tyto soubory zřejmě nemohly být vygenerovány jen z .tsv soborů (právě proto, že v těch chybí časové rozdělení).
+JSON soubory obsahují podobná data jako .tsv soubory, narozdíl od nich jsou ale rozděleny časově (den, noc atd.). Navzdory tomu, že popis v .js souboru odkazuje na .tsv soubor, tak tyto soubory zřejmě nemohly být vygenerovány jen z .tsv soborů (právě proto, že v těch chybí časové rozdělení).
 
 Název souborů se skládá z několika částí:
 
