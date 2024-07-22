@@ -319,24 +319,47 @@ def map_houses_to_zones():
     # start timer
     start_time = time.time()
 
-    useky_polygons = get_zones_polygons()
-
-    print(f"Loaded {len(useky_polygons)} zones           ")
-
     # get houses coordinates from the latest file
     print("Loading houses...")
 
-    houses_points = json_to_polygons(
-        json.load(
-            open(
-                f"data/downloaded/houses/{sorted(os.listdir("data/downloaded/houses"), reverse=True)[0]}",
-                "r",
-                encoding="utf-8",
+    house_files = sorted(os.listdir("data/downloaded/houses"))
+
+    known_houses = set()
+
+    houses_points = []
+
+    for i, house_file in enumerate(house_files, start=1):
+        print(f"Processing {i}/{len(house_files)} ({house_file})", end="\r")
+        houses_points_current = json_to_polygons(
+            json.load(
+                open(
+                    f"data/downloaded/houses/{house_file}",
+                    "r",
+                    encoding="utf-8",
+                )
             )
         )
-    )
+
+        for house in houses_points_current:  # todo: more efficient way to do this - exclude houses before converting to polygons
+            if house["CODE"] not in known_houses:
+                houses_points.append(house)
+                known_houses.add(house["CODE"])
+            # else:
+            #     # get house_point from houses_points
+            #     house_point = next(  # super slow
+            #         point for point in houses_points if point["CODE"] == house["CODE"]
+            #     )
+            #     if not equals(house_point["coordinates"], house["coordinates"]):  # this happens quite often for some reason
+            #         print(
+            #             f"House {house['CODE']} has multiple coordinates - using the first one"
+            #         )
+            #         houses_points.append(house)
 
     print("Mapping houses to zones...")
+
+    useky_polygons = get_zones_polygons()
+
+    print(f"Loaded {len(useky_polygons)} zones           ")
 
     # Convert data into GeoDataFrames
     houses_gdf = gpd.GeoDataFrame(houses_points, geometry="coordinates")
