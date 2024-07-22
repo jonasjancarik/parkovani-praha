@@ -8,75 +8,80 @@ import requests
 import shutil
 
 
-def get_latest_files(type_of_files):
-    if type_of_files not in ["zsj-useky", "useky"]:
-        raise ValueError("type_of_files must be either 'zsj-useky' or 'useky'")
+def download_area_data():
+    # list files in data/downloaded/parked_cars
+    files = os.listdir("data/downloaded/parked_cars")
 
-    if type_of_files == "zsj-useky":
-        # list files in data/downloaded/parked_cars
-        files = os.listdir("data/downloaded/parked_cars")
+    # each file is prefixed with a district code, e.g. P01-OB_201809D_NJ.json
+    # we need to extract the district codes and then for each district get the latest two files ending with _NA.json and _NJ.json
+    # NA = smaller areas (úseky), NJ = larger areas (zsj)
 
-        # each file is prefixed with a district code, e.g. P01-OB_201809D_NJ.json
-        # we need to extract the district codes and then for each district get the latest two files ending with _NA.json and _NJ.json
-        # NA = smaller areas (úseky), NJ = larger areas (zsj)
+    # extract district codes
+    districts = list(set([file.split("-")[0] for file in files]))
 
-        # extract district codes
-        districts = list(set([file.split("-")[0] for file in files]))
+    # prepare a http session
+    s = session_setup(requests.Session())
 
-        # prepare a http session
-        s = session_setup(requests.Session())
+    # for each district, get the latest file _NJ.json file (area-level data, which is not used for other analyses - we need it to get the area shapes)
+    # todo: simplify, this is adapted from older code that worked only with the lastest _NA.json files
 
-        # for each district, get the latest file _NJ.json file (area-level data, which is not used for other analyses - we need it to get the area shapes)
-        # todo: simplify, this is adapted from older code that worked only with the lastest _NA.json files
+    for district in districts:
+        files_district = [
+            file
+            for file in files
+            if file.startswith(district) and (file.endswith("D_NA.json"))
+        ]
+        zone_data_file = sorted(files_district, reverse=True)[0]
 
-        for district in districts:
-            files_district = [
-                file
-                for file in files
-                if file.startswith(district) and (file.endswith("D_NA.json"))
-            ]
-            zone_data_file = sorted(files_district, reverse=True)[0]
+        # download the NJ file
+        nj_file_name = zone_data_file.replace("D_NA", "D_NJ")
+        url = f"https://zps.tsk-praha.cz/puzzle/genmaps/{district}/{nj_file_name.split("-")[1]}"
 
-            # download the NJ file
-            nj_file_name = zone_data_file.replace("D_NA", "D_NJ")
-            url = f"https://zps.tsk-praha.cz/puzzle/genmaps/{district}/{nj_file_name.split("-")[1]}"
+        r = s.get(url)
 
-            r = s.get(url)
+        if r.status_code != 200:
+            raise Exception(f"Error while downloading {url}")
 
-            if r.status_code != 200:
-                raise Exception(f"Error while downloading {url}")
+        os.makedirs("data/downloaded/temp-area-data", exist_ok=True)
 
-            os.makedirs("data/downloaded/temp-area-data", exist_ok=True)
+        with open(
+            f"data/downloaded/temp-area-data/{nj_file_name}",
+            "w",
+            encoding="utf-8",
+        ) as f:
+            f.write(r.text)
 
-            with open(
-                f"data/downloaded/temp-area-data/{nj_file_name}",
-                "w",
-                encoding="utf-8",
-            ) as f:
-                f.write(r.text)
 
-    elif type_of_files == "useky":
-        # list files in data/downloaded/parked_cars
-        files = os.listdir("data/downloaded/parked_cars")
+def get_zones_polygons(district=None):
+    zone_files = os.listdir("data/downloaded/parked_cars")
+    if district:
+        zone_files = [file for file in zone_files if file.startswith(district)]
 
-        # each file is prefixed with a district code, e.g. P01-OB_201809D_NJ.json
-        # we need to extract the district codes and then for each district get the latest two files ending with _NA.json and _NJ.json
-        # NA = smaller areas (úseky), NJ = larger areas (zsj)
+    zone_polygons = []
 
-        # extract district codes
-        districts = list(set([file.split("-")[0] for file in files]))
+    for i, file in enumerate(zone_files, start=1):
+        print(f"Processing {i}/{len(zone_files)} ({file})", end="\r")
+        try:
+            zone_polygons_this_district = json_to_polygons(  # todo: this could definitely be more efficient, we don't have to convert to polys zones that we already have
+                json.load(
+                    open(
+                        f"data/downloaded/parked_cars/{file}",
+                        "r",
+                        encoding="utf-8",
+                    )
+                )
+            )
+        except json.decoder.JSONDecodeError:  # sometimes the json is malformed
+            continue
 
-        # extract latest two files ending with D_NA.json and D_NJ.json
-        files_to_return = []
-        for district in districts:
-            files_district = [
-                file
-                for file in files
-                if file.startswith(district) and (file.endswith("D_NA.json"))
-            ]
-            files_to_return.extend([sorted(files_district, reverse=True)[0]])
+        # extract existing zone codes into a set
+        existing_zone_codes = set([poly["CODE"] for poly in zone_polygons])
 
-        return files_to_return
+        for poly in zone_polygons_this_district:
+            if poly["CODE"] not in existing_zone_codes:
+                zone_polygons.append(poly)
+
+    return zone_polygons
 
 
 def json_to_polygons(json_data):
@@ -133,7 +138,7 @@ def map_useky_to_zsj():
     files_zone = os.listdir("data/downloaded/parked_cars")
     districts = list(set([file.split("-")[0] for file in files_zone]))
 
-    get_latest_files("zsj-useky")
+    download_area_data()
 
     overlaps_all = []
     unmatched_all = []
@@ -141,7 +146,7 @@ def map_useky_to_zsj():
     for i, district in enumerate(districts, start=1):
         print(f"\nProcessing district {i}/{len(districts)} ({district})")
 
-        # Load your JSON data into larger_areas_json and smaller_areas_json
+        # Load JSON data into larger_areas_json (areas) and smaller_areas_json (zones)
 
         # For smaller areas, we will cycle through all the districts' files in data/downloaded/parked_cars to get all the zones, even if they are not currently in use
 
@@ -163,30 +168,7 @@ def map_useky_to_zsj():
             )
         )
 
-        district_zone_files = [file for file in files_zone if file.startswith(district)]
-
-        smaller_areas_polygons = []
-
-        for file in district_zone_files:
-            try:
-                smaller_areas_polygons_this_district = json_to_polygons(  # todo: this could definitely be more efficient, we don't have to convert to polys zones that we already have
-                    json.load(
-                        open(
-                            f"data/downloaded/parked_cars/{file}",
-                            "r",
-                            encoding="utf-8",
-                        )
-                    )
-                )
-            except json.decoder.JSONDecodeError:  # sometimes the json is malformed
-                continue
-
-            # extract existing zone codes into a set
-            existing_zone_codes = set([poly["CODE"] for poly in smaller_areas_polygons])
-
-            for poly in smaller_areas_polygons_this_district:
-                if poly["CODE"] not in existing_zone_codes:
-                    smaller_areas_polygons.append(poly)
+        smaller_areas_polygons = get_zones_polygons(district)
 
         # Define overlap threshold
         overlap_threshold = 0.50
@@ -329,21 +311,9 @@ def map_useky_to_zsj():
 
 
 def map_houses_to_useky():
-    files_useky = get_latest_files("useky")
+    useky_polygons = get_zones_polygons()
 
-    useky_polygons = []
-
-    for counter, file in enumerate(files_useky, start=1):
-        useky_polygons.extend(
-            json_to_polygons(
-                json.load(
-                    open(f"data/downloaded/parked_cars/{file}", "r", encoding="utf-8")
-                )
-            )
-        )
-        print(f"Processed {counter}/{len(files_useky)} files", end="\r")
-
-    print(f"Loaded {len(useky_polygons)} úseky           ")
+    print(f"Loaded {len(useky_polygons)} zones           ")
 
     # get houses coordinates from the latest file
     print("Loading houses...")
@@ -358,7 +328,7 @@ def map_houses_to_useky():
         )
     )
 
-    print("Mapping houses to úseky...")
+    print("Mapping houses to zones...")
 
     # Convert data into GeoDataFrames
     houses_gdf = gpd.GeoDataFrame(houses_points, geometry="coordinates")
@@ -376,6 +346,9 @@ def map_houses_to_useky():
     final_gdf = final_gdf.rename(
         columns={"CODE_left": "house_code", "CODE_right": "usek_code"}
     )
+
+    # sort by house_code
+    final_gdf = final_gdf.sort_values(by="house_code")
 
     # Save the result to a CSV file
     final_gdf.to_csv("data/houses_useky_mapping.csv", index=False)
