@@ -249,14 +249,6 @@ def process_parked_cars():
         df["obsazenost"] = df["obsazenost"] / 100
         df["respektovanost"] = df["respektovanost"] / 100
 
-        # as a check, print the value of obsazenost for the row where kod useku is P1-0165 and filename is P01-OB_202001D_NA.json
-        print(
-            df[
-                (df["kod_useku"] == "P1-0165")
-                & (df["filename"] == "P01-OB_202001D_NA.json")
-            ]["obsazenost"]
-        )
-
         # add leading zero to district
         df["mestska_cast"] = utils.add_leading_zero_to_district(df, "mestska_cast")
 
