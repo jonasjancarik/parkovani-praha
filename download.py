@@ -326,7 +326,7 @@ if not args.type_of_data or args.type_of_data == "PARKING_SPACES":
 
     print("\nDone")
 
-if not not args.type_of_data or args.type_of_data == "HOUSES":
+if not args.type_of_data or args.type_of_data == "HOUSES":
     print("Downloading houses data...")
     # the URLs look like this: https://zps.tsk-praha.cz/puzzle/genmaps/PO_201801M_TR.json
     # let's cycle through the years and months and download the data
