@@ -3,6 +3,9 @@ import os
 import pandas as pd
 from shapely.geometry import Polygon, Point
 import geopandas as gpd
+from .utils import session_setup
+import requests
+import shutil
 
 
 def get_latest_files(type_of_files):
@@ -20,19 +23,37 @@ def get_latest_files(type_of_files):
         # extract district codes
         districts = list(set([file.split("-")[0] for file in files]))
 
-        # extract latest two files ending with D_NA.json and D_NJ.json
-        pairs_to_process = []
+        # prepare a http session
+        s = session_setup(requests.Session())
+
+        # for each district, get the latest file _NJ.json file (area-level data, which is not used for other analyses)
+        # todo: simplify, this is adapted from older code that worked only with the lastest _NA.json files
+
         for district in districts:
             files_district = [
                 file
                 for file in files
-                if file.startswith(district)
-                and (file.endswith("D_NA.json") or file.endswith("D_NJ.json"))
+                if file.startswith(district) and (file.endswith("D_NA.json"))
             ]
-            files_district = sorted(files_district, reverse=True)
-            pairs_to_process.append((files_district[0], files_district[1]))
+            zone_data_file = sorted(files_district, reverse=True)[0]
 
-        return pairs_to_process
+            # download the NJ file
+            nj_file_name = zone_data_file.replace("D_NA", "D_NJ")
+            url = f"https://zps.tsk-praha.cz/puzzle/genmaps/{district}/{nj_file_name.split("-")[1]}"
+
+            r = s.get(url)
+
+            if r.status_code != 200:
+                raise Exception(f"Error while downloading {url}")
+
+            os.makedirs("data/downloaded/temp-area-data", exist_ok=True)
+
+            with open(
+                f"data/downloaded/temp-area-data/{nj_file_name}",
+                "w",
+                encoding="utf-8",
+            ) as f:
+                f.write(r.text)
 
     elif type_of_files == "useky":
         # list files in data/downloaded/parked_cars
@@ -109,32 +130,63 @@ def json_to_polygons(json_data):
 
 
 def map_useky_to_zsj():
-    pairs_to_process = get_latest_files("zsj-useky")
+    files_zone = os.listdir("data/downloaded/parked_cars")
+    districts = list(set([file.split("-")[0] for file in files_zone]))
+
+    get_latest_files("zsj-useky")
 
     overlaps_all = []
     unmatched_all = []
 
-    for i, pair_to_process in enumerate(pairs_to_process, start=1):
-        print(f"\nProcessing pair {i}/{len(pairs_to_process)}")
+    for i, district in enumerate(districts, start=1):
+        print(f"\nProcessing district {i}/{len(districts)} ({district})")
+
         # Load your JSON data into larger_areas_json and smaller_areas_json
-        smaller_areas_polygons = json_to_polygons(
-            json.load(
-                open(
-                    f"data/downloaded/parked_cars/{pair_to_process[1]}",
-                    "r",
-                    encoding="utf-8",
-                )
+
+        # For smaller areas, we will cycle through all the districts' files in data/downloaded/parked_cars to get all the zones, even if they are not currently in use
+
+        # find file in data/downloaded/temp-area-data that matches the district code
+        area_data_file = list(
+            filter(
+                lambda x: x.startswith(district),
+                os.listdir("data/downloaded/temp-area-data"),
             )
-        )
+        )[0]
+
         larger_areas_polygons = json_to_polygons(
             json.load(
                 open(
-                    f"data/downloaded/parked_cars/{pair_to_process[0]}",
+                    f"data/downloaded/temp-area-data/{area_data_file}",
                     "r",
                     encoding="utf-8",
                 )
             )
         )
+
+        district_zone_files = [file for file in files_zone if file.startswith(district)]
+
+        smaller_areas_polygons = []
+
+        for file in district_zone_files:
+            try:
+                smaller_areas_polygons_this_district = json_to_polygons(  # todo: this could definitely be more efficient, we don't have to convert to polys zones that we already have
+                    json.load(
+                        open(
+                            f"data/downloaded/parked_cars/{file}",
+                            "r",
+                            encoding="utf-8",
+                        )
+                    )
+                )
+            except json.decoder.JSONDecodeError:  # sometimes the json is malformed
+                continue
+
+            # extract existing zone codes into a set
+            existing_zone_codes = set([poly["CODE"] for poly in smaller_areas_polygons])
+
+            for poly in smaller_areas_polygons_this_district:
+                if poly["CODE"] not in existing_zone_codes:
+                    smaller_areas_polygons.append(poly)
 
         # Define overlap threshold
         overlap_threshold = 0.50
@@ -145,9 +197,7 @@ def map_useky_to_zsj():
         for ii, small_poly in enumerate(smaller_areas_polygons, start=1):
             print(f"Processing polygon {ii}/{len(smaller_areas_polygons)}", end="\r")
 
-            if small_poly["CODE"].split("-")[0] != pair_to_process[1].split("-")[
-                0
-            ].replace("P0", "P"):
+            if small_poly["CODE"].split("-")[0] != district.replace("P0", "P"):
                 continue  # skip if the district code doesn't match
 
             # hardcoded cases for smaller areas that are not matched for some reason
@@ -170,6 +220,28 @@ def map_useky_to_zsj():
                     {
                         "kod_zsj": "127906",
                         "naz_zsj": "Děkanka",
+                        "code": small_poly["CODE"],
+                        "overlap": 1,
+                        "mestska_cast": small_poly["CODE"].split("-")[0],
+                    }
+                )
+                continue
+            elif small_poly["CODE"] == "P9-9018":
+                overlaps_all.append(
+                    {
+                        "kod_zsj": "131369",
+                        "naz_zsj": "Na Vyhlídce",
+                        "code": small_poly["CODE"],
+                        "overlap": 1,
+                        "mestska_cast": small_poly["CODE"].split("-")[0],
+                    }
+                )
+                continue
+            elif small_poly["CODE"] == "P7-0176":
+                overlaps_all.append(
+                    {
+                        "kod_zsj": "305961",
+                        "naz_zsj": "Letná",
                         "code": small_poly["CODE"],
                         "overlap": 1,
                         "mestska_cast": small_poly["CODE"].split("-")[0],
@@ -241,7 +313,14 @@ def map_useky_to_zsj():
     # save overlaps_all to csv
     overlaps_all_df.to_csv("data/useky_zsj_mapping.csv", index=False)
 
-    print(f"{len(unmatched_all)} smaller areas unmatched")
+    if unmatched_all:
+        print(f"{len(unmatched_all)} smaller areas unmatched")
+        print("Unmatched areas:")
+        for poly in unmatched_all:
+            print(poly["CODE"])
+
+    # remove temporary files
+    shutil.rmtree("data/downloaded/temp-area-data")
 
     print("Done.")
 

@@ -1,6 +1,15 @@
 import os
 import pandas as pd
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def session_setup(session):
+    session.auth = (os.getenv("TSK_USERNAME"), os.getenv("TSK_PASSWORD"))
+    session.timeout = 60
+    return session
 
 
 def load_files_to_df(category):

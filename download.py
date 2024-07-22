@@ -5,6 +5,7 @@ import datetime
 import sys
 import argparse
 from dateutil.relativedelta import relativedelta
+from src.utils import session_setup
 
 load_dotenv()
 USER = os.getenv("TSK_USERNAME")
@@ -83,12 +84,6 @@ districts = [
 if not args.type_of_data:
     # will download all
     print("Downloading all types of data")
-
-
-def session_setup(session):
-    session.auth = (USER, PASSWORD)
-    session.timeout = 60
-    return session
 
 
 if not args.type_of_data or args.type_of_data == "PARKING":
