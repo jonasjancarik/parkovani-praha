@@ -26,7 +26,7 @@ def get_latest_files(type_of_files):
         # prepare a http session
         s = session_setup(requests.Session())
 
-        # for each district, get the latest file _NJ.json file (area-level data, which is not used for other analyses)
+        # for each district, get the latest file _NJ.json file (area-level data, which is not used for other analyses - we need it to get the area shapes)
         # todo: simplify, this is adapted from older code that worked only with the lastest _NA.json files
 
         for district in districts:
@@ -309,6 +309,9 @@ def map_useky_to_zsj():
     overlaps_all_df["mestska_cast"] = overlaps_all_df["mestska_cast"].str.replace(
         r"P(\d\b)", r"P0\g<1>", regex=True
     )
+
+    # sort by code
+    overlaps_all_df = overlaps_all_df.sort_values(by="code")
 
     # save overlaps_all to csv
     overlaps_all_df.to_csv("data/useky_zsj_mapping.csv", index=False)
