@@ -238,8 +238,8 @@ def process_parked_cars():
 
         # calculate absolute values for percentage columns by multiplying by parkovacich_mist_celkem
         df[absolute_columns] = df[percent_columns_with_affix].multiply(
-            df["parkovacich_mist_celkem"],
-            axis="index",  # todo!: find out whether "parkovacich mist v zps" should be used instead
+            df["parkovacich_mist_v_zps"],
+            axis="index",
         )
 
         # now drop all the _pct columns as we won't need them anymore
