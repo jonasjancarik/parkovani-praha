@@ -31,8 +31,8 @@ def parse_arguments():
             process_permits_and_spaces(),
             process_permits_from_houses(),
         ],
-        "USEKY_NA_ZSJ": mapping.map_useky_to_zsj,
-        "DOMY_NA_USEKY": mapping.map_houses_to_useky,
+        "USEKY_NA_ZSJ": mapping.map_zones_to_areas,
+        "DOMY_NA_USEKY": mapping.map_houses_to_zones,
     }
 
     arg = sys.argv[1].upper() if len(sys.argv) > 1 else "ALL"

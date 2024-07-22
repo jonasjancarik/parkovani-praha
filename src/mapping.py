@@ -6,6 +6,7 @@ import geopandas as gpd
 from .utils import session_setup
 import requests
 import shutil
+import time
 
 
 def download_area_data():
@@ -134,7 +135,10 @@ def json_to_polygons(json_data):
     return polygons
 
 
-def map_useky_to_zsj():
+def map_zones_to_areas():
+    # start timer
+    start_time = time.time()
+
     files_zone = os.listdir("data/downloaded/parked_cars")
     districts = list(set([file.split("-")[0] for file in files_zone]))
 
@@ -307,10 +311,14 @@ def map_useky_to_zsj():
     # remove temporary files
     shutil.rmtree("data/downloaded/temp-area-data")
 
-    print("Done.")
+    # end tiemer
+    print(f"Done in {time.time() - start_time:.2f} seconds.")
 
 
-def map_houses_to_useky():
+def map_houses_to_zones():
+    # start timer
+    start_time = time.time()
+
     useky_polygons = get_zones_polygons()
 
     print(f"Loaded {len(useky_polygons)} zones           ")
@@ -352,3 +360,6 @@ def map_houses_to_useky():
 
     # Save the result to a CSV file
     final_gdf.to_csv("data/houses_useky_mapping.csv", index=False)
+
+    # end timer
+    print(f"Done in {time.time() - start_time:.2f} seconds.")
