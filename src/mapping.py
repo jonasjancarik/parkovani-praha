@@ -90,8 +90,8 @@ def json_to_polygons(json_data):
     Convert TSK JSON data to Shapely polygons
     """
 
-    def parse_coordinates(feature, house=False):
-        if house and feature.get("geometry"):
+    def parse_coordinates(feature, building=False):
+        if building and feature.get("geometry"):
             try:
                 return Point(feature["geometry"]["coordinates"])
             except TypeError:
@@ -127,7 +127,7 @@ def json_to_polygons(json_data):
             else:
                 polygon_data = {
                     "CODE": feature["properties"]["CODE"],
-                    "coordinates": parse_coordinates(feature, house=True),
+                    "coordinates": parse_coordinates(feature, building=True),
                 }
                 if polygon_data["coordinates"]:
                     polygons.append(polygon_data)
@@ -315,59 +315,59 @@ def map_zones_to_areas():
     print(f"Done in {time.time() - start_time:.2f} seconds.")
 
 
-def map_houses_to_zones():
+def map_buildings_to_zones():
     # start timer
     start_time = time.time()
 
-    # get houses coordinates from the latest file
-    print("Loading houses...")
+    # get buildings coordinates from the latest file
+    print("Loading buildings...")
 
-    house_files = sorted(os.listdir("data/downloaded/houses"))
+    building_files = sorted(os.listdir("data/downloaded/buildings"))
 
-    known_houses = set()
+    known_buildings = set()
 
-    houses_points = []
+    buildings_points = []
 
-    for i, house_file in enumerate(house_files, start=1):
-        print(f"Processing {i}/{len(house_files)} ({house_file})", end="\r")
-        houses_points_current = json_to_polygons(
+    for i, building_file in enumerate(building_files, start=1):
+        print(f"Processing {i}/{len(building_files)} ({building_file})", end="\r")
+        buildings_points_current = json_to_polygons(
             json.load(
                 open(
-                    f"data/downloaded/houses/{house_file}",
+                    f"data/downloaded/buildings/{building_file}",
                     "r",
                     encoding="utf-8",
                 )
             )
         )
 
-        for house in houses_points_current:  # todo: more efficient way to do this - exclude houses before converting to polygons
-            if house["CODE"] not in known_houses:
-                houses_points.append(house)
-                known_houses.add(house["CODE"])
+        for building in buildings_points_current:  # todo: more efficient way to do this - exclude buildings before converting to polygons
+            if building["CODE"] not in known_buildings:
+                buildings_points.append(building)
+                known_buildings.add(building["CODE"])
             # else:
-            #     # get house_point from houses_points
-            #     house_point = next(  # super slow
-            #         point for point in houses_points if point["CODE"] == house["CODE"]
+            #     # get building_point from buildings_points
+            #     building_point = next(  # super slow
+            #         point for point in buildings_points if point["CODE"] == building["CODE"]
             #     )
-            #     if not equals(house_point["coordinates"], house["coordinates"]):  # this happens quite often for some reason
+            #     if not equals(building_point["coordinates"], building["coordinates"]):  # this happens quite often for some reason
             #         print(
-            #             f"House {house['CODE']} has multiple coordinates - using the first one"
+            #             f"Building {building['CODE']} has multiple coordinates - using the first one"
             #         )
-            #         houses_points.append(house)
+            #         buildings_points.append(building)
 
-    print("Mapping houses to zones...")
+    print("Mapping buildings to zones...")
 
     useky_polygons = get_zones_polygons()
 
     print(f"Loaded {len(useky_polygons)} zones           ")
 
     # Convert data into GeoDataFrames
-    houses_gdf = gpd.GeoDataFrame(houses_points, geometry="coordinates")
+    buildings_gdf = gpd.GeoDataFrame(buildings_points, geometry="coordinates")
     useky_gdf = gpd.GeoDataFrame(useky_polygons, geometry="coordinates")
 
     # Spatial join on the nearest úsek
     joined_gdf = gpd.sjoin_nearest(
-        houses_gdf, useky_gdf, how="left", distance_col="distance"
+        buildings_gdf, useky_gdf, how="left", distance_col="distance"
     )
 
     # Extract the columns we need
@@ -375,14 +375,14 @@ def map_houses_to_zones():
 
     # Rename the columns
     final_gdf = final_gdf.rename(
-        columns={"CODE_left": "house_code", "CODE_right": "usek_code"}
+        columns={"CODE_left": "building_code", "CODE_right": "usek_code"}
     )
 
-    # sort by house_code
-    final_gdf = final_gdf.sort_values(by="house_code")
+    # sort by building_code
+    final_gdf = final_gdf.sort_values(by="building_code")
 
     # Save the result to a CSV file
-    final_gdf.to_csv("data/houses_useky_mapping.csv", index=False)
+    final_gdf.to_csv("data/buildings_useky_mapping.csv", index=False)
 
     # end timer
     print(f"Done in {time.time() - start_time:.2f} seconds.")

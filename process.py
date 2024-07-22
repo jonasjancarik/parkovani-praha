@@ -23,16 +23,16 @@ def parse_arguments():
         "PERMITS": process_permits,
         "SPACES": process_spaces,
         "PERMITS_SPACES": process_permits_and_spaces,
-        "PERMITS_ZONES": process_permits_from_houses,
-        "ALL": lambda: [  # todo: unclear that this won't process mapping zones and houses to areas
+        "PERMITS_ZONES": process_permits_from_buildings,
+        "ALL": lambda: [  # todo: unclear that this won't process mapping zones and buildings to areas
             process_parked_cars(),
             process_permits(),
             process_spaces(),
             process_permits_and_spaces(),
-            process_permits_from_houses(),
+            process_permits_from_buildings(),
         ],
         "USEKY_NA_ZSJ": mapping.map_zones_to_areas,
-        "DOMY_NA_USEKY": mapping.map_houses_to_zones,
+        "DOMY_NA_USEKY": mapping.map_buildings_to_zones,
     }
 
     arg = sys.argv[1].upper() if len(sys.argv) > 1 else "ALL"
@@ -504,14 +504,14 @@ def process_permits_and_spaces():
     logging.info('Data saved to "data/processed/data_permits_and_spaces.csv"')
 
 
-def process_permits_from_houses():
+def process_permits_from_buildings():
     # will create a "permits per zone" file
 
     # load the data
 
-    # read each JSON file in data/downloaded/houses and run it through the process_json_data function
+    # read each JSON file in data/downloaded/buildings and run it through the process_json_data function
     # append the results to a list
-    data_dir = "data/downloaded/houses"
+    data_dir = "data/downloaded/buildings"
     files = os.listdir(data_dir)
     permits_all_df = pd.DataFrame()
 
@@ -534,19 +534,19 @@ def process_permits_from_houses():
 
         logging.info(f"Processed {counter} out of {len(files)} files")
 
-    # load the mapping of houses to zones
+    # load the mapping of buildings to zones
     try:
-        houses_to_zones_df = pd.read_csv("data/houses_useky_mapping.csv")
+        buildings_to_zones_df = pd.read_csv("data/buildings_useky_mapping.csv")
     except Exception:  # todo: better exception handling
         logging.info("Run `process.py domy_na_useky` first.")
         sys.exit(1)
 
-    # rename CODE to house_code
-    permits_all_df.rename(columns={"CODE": "house_code"}, inplace=True)
+    # rename CODE to building_code
+    permits_all_df.rename(columns={"CODE": "building_code"}, inplace=True)
 
     # join the two dataframes on 'code'
-    permits_all_df["house_code"] = permits_all_df["house_code"].astype("int64")
-    permits_all_df = permits_all_df.merge(houses_to_zones_df, on="house_code")
+    permits_all_df["building_code"] = permits_all_df["building_code"].astype("int64")
+    permits_all_df = permits_all_df.merge(buildings_to_zones_df, on="building_code")
 
     # group by date and usek_code and sum the values
     permits_all_df = permits_all_df.groupby(["date", "usek_code"]).sum().reset_index()
@@ -554,8 +554,8 @@ def process_permits_from_houses():
     # rename XSUM to POP_CELKEM
     permits_all_df.rename(columns={"XSUM": "POP_CELKEM"}, inplace=True)
 
-    # drop the house_code column
-    permits_all_df.drop(columns=["house_code"], inplace=True)
+    # drop the building_code column
+    permits_all_df.drop(columns=["building_code"], inplace=True)
 
     # rename usek_code to kod_useku
     permits_all_df.rename(columns={"usek_code": "kod_useku"}, inplace=True)

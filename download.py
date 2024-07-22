@@ -14,7 +14,7 @@ PASSWORD = os.getenv("TSK_PASSWORD")
 parser = argparse.ArgumentParser(description="Download data for parking in Prague.")
 parser.add_argument(
     "--type_of_data",
-    choices=["PARKING", "PARKING_PERMITS", "PARKING_SPACES", "HOUSES"],
+    choices=["PARKING", "PARKING_PERMITS", "PARKING_SPACES", "BUILDINGS"],
     help="Type of data to download",
     default=None,
 )
@@ -326,19 +326,19 @@ if not args.type_of_data or args.type_of_data == "PARKING_SPACES":
 
     print("\nDone")
 
-if not args.type_of_data or args.type_of_data == "HOUSES":
-    print("Downloading houses data...")
+if not args.type_of_data or args.type_of_data == "BUILDINGS":
+    print("Downloading buildings data...")
     # the URLs look like this: https://zps.tsk-praha.cz/puzzle/genmaps/PO_201801M_TR.json
     # let's cycle through the years and months and download the data
     # the data is in the form of a JSON file
 
     # create directory if it does not exist
-    if not os.path.exists("data/downloaded/houses"):
-        os.makedirs("data/downloaded/houses")
+    if not os.path.exists("data/downloaded/buildings"):
+        os.makedirs("data/downloaded/buildings")
         downloaded_files = []
     else:
         # get list of already downloaded files
-        downloaded_files = os.listdir("data/downloaded/houses")
+        downloaded_files = os.listdir("data/downloaded/buildings")
 
     # generate list of filenames
     filenames = []
@@ -384,7 +384,9 @@ if not args.type_of_data or args.type_of_data == "HOUSES":
                 # empty file
                 continue
 
-            with open(f"data/downloaded/houses/{filename}", "w", encoding="utf-8") as f:
+            with open(
+                f"data/downloaded/buildings/{filename}", "w", encoding="utf-8"
+            ) as f:
                 f.write(r.text)
 
             print(f"Progress: {counter}/{len(filenames)}", end="\r")

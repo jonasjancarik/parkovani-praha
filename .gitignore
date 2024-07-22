@@ -1,5 +1,5 @@
 .vscode
-data/downloaded/houses
+data/downloaded/buildings
 data/processed/data_parking.csv
 .ignore*
 

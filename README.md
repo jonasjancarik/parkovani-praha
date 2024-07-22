@@ -51,7 +51,7 @@ Typy dat jsou:
 - PARKING - data o využití zón
 - PARKING_PERMITS - data o vydaných parkovacích povoleních
 - PARKING_SPACES - data o parkovacích místech
-- HOUSES - data o registracích na jednotlivých adresách
+- BUILDINGS - data o registracích na jednotlivých adresách
 
 Pro správný běh přípravy dat je každopádně dobré stáhnout všechny typy dat.
 
