@@ -210,7 +210,7 @@ def process_parked_cars():
                 [
                     "filename",
                     "mestska_cast",
-                    "cast_dne",  # todo: make consistent with other column names
+                    "cast_dne",
                     "kod_useku",
                     "typ_zony",
                     "parkovacich_mist_celkem",
@@ -236,18 +236,22 @@ def process_parked_cars():
         # rename percent_columns var to absolute_columns for clarity
         absolute_columns = percent_columns
 
-        # calculate absolute values for percentage columns by multiplying by parkovacich_mist_celkem
-        df[absolute_columns] = df[percent_columns_with_affix].multiply(
-            df["parkovacich_mist_v_zps"],
-            axis="index",
+        # process numbers for obsazenost and respektovanost, which are also percentages (but we'll keep them as percentages)
+        df["obsazenost"] = df["obsazenost"] / 100
+        df["respektovanost"] = df["respektovanost"] / 100
+
+        # calculate absolute values for percentage columns by multiplying by parkovacich_mist_v_zps (number or unreserved spaces in the zone) and obsazenost (occupancy)
+        df[absolute_columns] = (
+            df[percent_columns_with_affix]
+            .multiply(
+                df["parkovacich_mist_v_zps"],
+                axis="index",
+            )
+            .multiply(df["obsazenost"], axis="index")
         )
 
         # now drop all the _pct columns as we won't need them anymore
         df.drop(columns=percent_columns_with_affix, inplace=True)
-
-        # process numbers for obsazenost and respektovanost, which are also percentages (but we'll keep them as percentages)
-        df["obsazenost"] = df["obsazenost"] / 100
-        df["respektovanost"] = df["respektovanost"] / 100
 
         # add leading zero to district
         df["mestska_cast"] = utils.add_leading_zero_to_district(df, "mestska_cast")
@@ -378,6 +382,9 @@ def process_parked_cars():
 
     # rename columns to more readable names
     parked_cars_all_df = rename_and_calculate_columns(parked_cars_all_df)
+
+    # sort by date and oblast
+    parked_cars_all_df.sort_values(["kod_useku", "date", "cast_dne"], inplace=True)
 
     # export to CSV
     logging.info("Saving CSV...")
