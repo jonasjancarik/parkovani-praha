@@ -1,11 +1,13 @@
 import os
 import pandas as pd
+import numpy as np
 import json
 import sys
 from src import mapping, utils
 import logging
 from dotenv import load_dotenv
 import zipfile
+from tqdm import tqdm
 
 # Load environment variables
 load_dotenv()
@@ -182,8 +184,10 @@ def process_parked_cars():
             "CATEGORY": "typ_zony",
         }
 
+        logging.info("Renaming columns...")
         df.rename(columns=new_column_names, inplace=True)
 
+        logging.info("Calculating derived columns...")
         # calculate navstevnici: navstevnici_platici + navstevnici_neplatici
         df["navstevnici"] = (
             df["navstevnici_platici"] + df["navstevnici_neplatici"] + df["prenosna"]
@@ -203,6 +207,7 @@ def process_parked_cars():
             + df["volna_mista"]
         )
 
+        logging.info("Processing percentage columns...")
         # divide percentage values by 100
         percent_columns = list(
             set(df.columns)
@@ -240,6 +245,7 @@ def process_parked_cars():
         df["obsazenost"] = df["obsazenost"] / 100
         df["respektovanost"] = df["respektovanost"] / 100
 
+        logging.info("Calculating absolute values...")
         # calculate absolute values for percentage columns by multiplying by parkovacich_mist_v_zps (number or unreserved spaces in the zone) and obsazenost (occupancy)
         df[absolute_columns] = (
             df[percent_columns_with_affix]
@@ -250,12 +256,14 @@ def process_parked_cars():
             .multiply(df["obsazenost"], axis="index")
         )
 
+        logging.info("Cleaning up temporary columns...")
         # now drop all the _pct columns as we won't need them anymore
         df.drop(columns=percent_columns_with_affix, inplace=True)
 
         # add leading zero to district
         df["mestska_cast"] = utils.add_leading_zero_to_district(df, "mestska_cast")
 
+        logging.info("Reordering columns...")
         column_order = [
             "kod_useku",
             "kod_zsj",
@@ -311,6 +319,84 @@ def process_parked_cars():
         except Exception as e:
             logging.error(f"Error while compressing the file: {e}")
 
+    def detect_and_smooth_anomalies_optimized(
+        df,
+        space_columns=["parkovacich_mist_v_zps", "parkovacich_mist_celkem"],
+        window_size=5,
+        threshold=5.0,
+        max_consecutive=12,
+        epsilon=1e-9,
+    ):
+        # Sort by zone and date to ensure correct rolling window calculation
+        df = df.sort_values(["kod_useku", "date"])
+        df = df.copy()  # Work on a copy to avoid mutating original data
+
+        # Process each column
+        for column in space_columns:
+            logging.info(f"Processing column: {column}")
+
+            # Process each zone group at once using apply
+            def process_zone_group(group):
+                # Calculate rolling median
+                rolling_median = group.rolling(
+                    window=window_size, center=True, min_periods=2
+                ).median()
+
+                # Calculate absolute deviations
+                abs_dev = (group - rolling_median).abs()
+
+                # Calculate rolling MAD
+                rolling_mad = group.rolling(
+                    window=window_size, center=True, min_periods=2
+                ).apply(lambda x: np.median(np.abs(x - np.median(x))), raw=True)
+
+                # Handle zero or near-zero MAD
+                rolling_mad = rolling_mad.fillna(0) + epsilon
+
+                # Identify anomalies
+                anomalies = abs_dev > (threshold * rolling_mad)
+
+                # Handle consecutive anomalies
+                consecutive_sum = anomalies.rolling(
+                    window=max_consecutive, center=True
+                ).sum()
+                long_run_mask = consecutive_sum >= max_consecutive
+                anomalies[long_run_mask] = False
+
+                # Replace anomalies with rolling median
+                group_copy = group.copy()
+                group_copy[anomalies] = rolling_median[anomalies]
+
+                return group_copy
+
+            # Create a copy of the column to work with
+            original_values = df[column].copy()
+
+            # Process each zone separately to avoid MultiIndex issues
+            for zone in df["kod_useku"].unique():
+                zone_mask = df["kod_useku"] == zone
+
+                # Skip if no data for this zone
+                if not zone_mask.any():
+                    continue
+
+                # Get data for this zone
+                zone_data = original_values.loc[zone_mask]
+
+                # Process this zone's data
+                if (
+                    len(zone_data) > window_size
+                ):  # Only process if we have enough data points
+                    processed_data = process_zone_group(zone_data)
+
+                    # Update the original values with the processed data
+                    original_values.loc[zone_mask] = processed_data
+
+            # Update the DataFrame with the processed values
+            df[column] = original_values
+
+        return df
+
     ####################################################
     # main part of the parked cars processing function #
     ####################################################
@@ -340,51 +426,68 @@ def process_parked_cars():
 
     # Processing
 
-    parked_cars_all_df = pd.DataFrame()
-
-    # loop through files (districts)
-    for counter, file in enumerate(files, start=1):
+    # Read all JSON files at once into a list of dictionaries
+    data_list = []
+    for file in tqdm(files, desc="Loading files"):
         file_path = os.path.join(data_dir, file)
-
-        logging.debug(f"Processing {file_path}")
-
         try:
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
+                # Add file name to the data for later reference
+                processed_data = process_json_data(data)
+                if processed_data:  # if not empty
+                    for item in processed_data:
+                        item["filename"] = file
+                    data_list.extend(processed_data)
         except json.decoder.JSONDecodeError:
             logging.debug(f"Error while loading {file} (potentially missing data)")
             continue
 
-        parked_cars_district = process_json_data(data)
-        parked_cars_district_df = pd.DataFrame(parked_cars_district)
+    # Create DataFrame once from all data
+    parked_cars_all_df = pd.DataFrame(data_list)
 
-        # enrich the data (unless empty)
-        if not parked_cars_district_df.empty:
-            parked_cars_district_df = enrich_dataframe(
-                parked_cars_district_df, file, zones_to_areas_df
+    # Enrich all data at once
+    if not parked_cars_all_df.empty:
+        logging.info("Enriching data...")
+        # Add time period for all rows at once
+        time_period = {
+            "D_": "den",
+            "N_": "noc",
+            "P_": "Po-Pá (MPD)",
+            "S_": "So-Ne (MPD)",
+            "W_": "Po-Pá",
+            "X_": "So-Ne",
+        }
+
+        logging.info("Adding time period...")
+        parked_cars_all_df["cast_dne"] = parked_cars_all_df["filename"].map(
+            lambda x: next(
+                (time_period[key] for key in time_period if key in x), "Unknown"
             )
-        else:
-            logging.debug(f"Skipping file {file} due to missing data")
-            continue
-
-        # append this zone's data to the main dataframe
-        parked_cars_all_df = pd.concat(
-            [parked_cars_all_df, parked_cars_district_df], ignore_index=True
         )
 
-        if os.getenv("LOG_LEVEL", "INFO").upper() == "DEBUG":
-            logging.info(f"Processed {counter} out of {len(files)} files")
-        else:
-            print(f"\rProcessed {counter} out of {len(files)} files", end="")
+        # Merge with zones_to_areas_df all at once
+        logging.info("Merging with zones_to_areas_df...")
+        parked_cars_all_df = parked_cars_all_df.merge(zones_to_areas_df, on="CODE")
 
-    if os.getenv("LOG_LEVEL", "INFO").upper() != "DEBUG":
-        print("")  # print newline after the progress counter
+        # Add dates all at once
+        logging.info("Adding dates...")
+        # Extract YYYYMM using string operations
+        year_month = parked_cars_all_df["filename"].str.split("_").str[1].str[:6]
+        # Convert to datetime and get end of month
+        parked_cars_all_df["date"] = pd.to_datetime(
+            year_month + "01", format="%Y%m%d"
+        ) + pd.offsets.MonthEnd(0)
 
-    # rename columns to more readable names
-    parked_cars_all_df = rename_and_calculate_columns(parked_cars_all_df)
+        # rename columns to more readable names
+        logging.info("Renaming columns...")
+        parked_cars_all_df = rename_and_calculate_columns(parked_cars_all_df)
 
     # sort by date and oblast
     parked_cars_all_df.sort_values(["kod_useku", "date", "cast_dne"], inplace=True)
+
+    # detect and smooth anomalies
+    parked_cars_all_df = detect_and_smooth_anomalies_optimized(parked_cars_all_df)
 
     # export to CSV
     logging.info("Saving CSV...")
