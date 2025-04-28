@@ -69,6 +69,12 @@ Pro vytvoření souboru `data_parking_and_permits.csv`, který kombinuje data o 
 python join.py
 ```
 
+Kompletní aktualizaci tedy provedete takto:
+
+```bash
+python download.py && python process.py && python join.py
+```
+
 #### Podrobnější nastavení
 
 Je také  možné vybrat jen určitý typ dat, který se má zpracovat:
@@ -191,3 +197,12 @@ některé městské části mají navíc soubory W a X, tedy měly by existovat 
 - OB_202311W_NJ.json
 - OB_202311X_NA.json
 - OB_202311X_NJ.json
+
+# Chybovost dat
+
+Bohužel v datech se objevují zjevné chyby.
+
+Například:
+
+- úsek P5-1410 má po většinu roku 2022 hlášeno 250 parkovacích míst, přitom v jiných měsících jich měl 65 nebo 66.
+- chybí data pro úsek P5-1414 za březen 2023
