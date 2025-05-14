@@ -327,75 +327,81 @@ def process_parked_cars():
         max_consecutive=12,
         epsilon=1e-9,
     ):
-        # Sort by zone and date to ensure correct rolling window calculation
-        df = df.sort_values(["kod_useku", "date"])
-        df = df.copy()  # Work on a copy to avoid mutating original data
+        df_out = df.copy()  # Create a copy to preserve original order and for returning
+        # Sort by zone and date for correct rolling window calculations.
+        # Processing will happen on this sorted version.
+        df_sorted_for_processing = df.sort_values(["kod_useku", "date"])
 
-        # Process each column
+        # Inner function to process a series (one column for one zone)
+        # Has access to window_size, threshold, etc., by closure
+        def process_series_for_zone(series_group):
+            # If not enough data points for the window, return the group unchanged
+            if len(series_group) <= window_size:
+                return series_group
+
+            # Calculate rolling median for the series_group
+            rolling_median_group = series_group.rolling(
+                window=window_size, center=True, min_periods=2
+            ).median()
+
+            # Calculate absolute deviations
+            abs_dev_group = (series_group - rolling_median_group).abs()
+
+            # Calculate rolling MAD
+            # This lambda for rolling.apply is a known performance concern but not changed in this refactor.
+            rolling_mad_group = series_group.rolling(
+                window=window_size, center=True, min_periods=2
+            ).apply(lambda x: np.median(np.abs(x - np.median(x))), raw=True)
+
+            # Handle zero or near-zero MAD
+            rolling_mad_group = rolling_mad_group.fillna(0) + epsilon
+
+            # Identify anomalies
+            anomalies_group = abs_dev_group > (threshold * rolling_mad_group)
+
+            # Handle consecutive anomalies
+            consecutive_sum_group = anomalies_group.rolling(
+                window=max_consecutive,
+                center=True,
+                min_periods=1,  # min_periods=1 for sum of booleans
+            ).sum()
+            long_run_mask_group = consecutive_sum_group >= max_consecutive
+            anomalies_group[long_run_mask_group] = (
+                False  # Modify boolean Series in place
+            )
+
+            # Replace anomalies
+            series_group_copy = (
+                series_group.copy()
+            )  # Copy the series to modify and return
+            # Replace anomalous values with the calculated rolling median
+            # If rolling_median_group is NaN at an anomaly, NaN will be assigned.
+            series_group_copy.loc[anomalies_group] = rolling_median_group[
+                anomalies_group
+            ]
+
+            return series_group_copy
+
+        # Process each specified column
         for column in space_columns:
-            logging.info(f"Processing column: {column}")
+            logging.info(f"Processing column: {column} using groupby.transform")
 
-            # Process each zone group at once using apply
-            def process_zone_group(group):
-                # Calculate rolling median
-                rolling_median = group.rolling(
-                    window=window_size, center=True, min_periods=2
-                ).median()
+            # Apply the transformation.
+            # groupby('kod_useku') groups the sorted DataFrame.
+            # [column] selects the specific column for transformation.
+            # transform(process_series_for_zone) applies the function to each group (zone's data for the column).
+            # The result (transformed_column) will have an index aligned with df_sorted_for_processing.
+            transformed_column = df_sorted_for_processing.groupby(
+                "kod_useku",
+                group_keys=False,  # group_keys=False is good practice with transform
+            )[column].transform(process_series_for_zone)
 
-                # Calculate absolute deviations
-                abs_dev = (group - rolling_median).abs()
+            # Assign the processed column back to df_out.
+            # Pandas aligns on index, so values go to the correct rows in df_out,
+            # preserving the original DataFrame's order.
+            df_out[column] = transformed_column
 
-                # Calculate rolling MAD
-                rolling_mad = group.rolling(
-                    window=window_size, center=True, min_periods=2
-                ).apply(lambda x: np.median(np.abs(x - np.median(x))), raw=True)
-
-                # Handle zero or near-zero MAD
-                rolling_mad = rolling_mad.fillna(0) + epsilon
-
-                # Identify anomalies
-                anomalies = abs_dev > (threshold * rolling_mad)
-
-                # Handle consecutive anomalies
-                consecutive_sum = anomalies.rolling(
-                    window=max_consecutive, center=True
-                ).sum()
-                long_run_mask = consecutive_sum >= max_consecutive
-                anomalies[long_run_mask] = False
-
-                # Replace anomalies with rolling median
-                group_copy = group.copy()
-                group_copy[anomalies] = rolling_median[anomalies]
-
-                return group_copy
-
-            # Create a copy of the column to work with
-            original_values = df[column].copy()
-
-            # Process each zone separately to avoid MultiIndex issues
-            for zone in df["kod_useku"].unique():
-                zone_mask = df["kod_useku"] == zone
-
-                # Skip if no data for this zone
-                if not zone_mask.any():
-                    continue
-
-                # Get data for this zone
-                zone_data = original_values.loc[zone_mask]
-
-                # Process this zone's data
-                if (
-                    len(zone_data) > window_size
-                ):  # Only process if we have enough data points
-                    processed_data = process_zone_group(zone_data)
-
-                    # Update the original values with the processed data
-                    original_values.loc[zone_mask] = processed_data
-
-            # Update the DataFrame with the processed values
-            df[column] = original_values
-
-        return df
+        return df_out
 
     ####################################################
     # main part of the parked cars processing function #
