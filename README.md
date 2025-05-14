@@ -28,6 +28,12 @@ Přehled datových souborů:
 
 ## Aktualizace dat
 
+TLDR: 
+
+```python
+python download.py && python process.py && python join.py
+```
+
 ### Stažení dat
 
 Pro stažení dat je potřeba mít přístupové údaje k portálu TSK. Ty je potřeba zadat do souboru `.env`. Použijte `.env.example` jako vzor.
