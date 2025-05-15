@@ -21,13 +21,23 @@ logging.basicConfig(
 
 def parse_arguments():
     valid_args = {
-        "PARKING": process_parked_cars,
+        "PARKING": lambda: process_parked_cars(apply_anomaly_detection=True),
+        "PARKING_NO_ANOMALY": lambda: process_parked_cars(
+            apply_anomaly_detection=False
+        ),
         "PERMITS": process_permits,
         "SPACES": process_spaces,
         "PERMITS_SPACES": process_permits_and_spaces,
         "PERMITS_ZONES": process_permits_from_buildings,
-        "ALL": lambda: [  # todo: unclear that this won't process mapping zones and buildings to areas
-            process_parked_cars(),
+        "ALL": lambda: [
+            process_parked_cars(apply_anomaly_detection=True),
+            process_permits(),
+            process_spaces(),
+            process_permits_and_spaces(),
+            process_permits_from_buildings(),
+        ],
+        "ALL_NO_ANOMALY": lambda: [  # Allows skipping anomaly detection for the parking part when running ALL
+            process_parked_cars(apply_anomaly_detection=False),
             process_permits(),
             process_spaces(),
             process_permits_and_spaces(),
@@ -128,7 +138,7 @@ def process_json_data(data):
     return areas
 
 
-def process_parked_cars():
+def process_parked_cars(apply_anomaly_detection: bool = True):
     def enrich_dataframe(df, file, zones_to_areas_df):
         # parse time period code
         time_period = {
@@ -319,7 +329,7 @@ def process_parked_cars():
         except Exception as e:
             logging.error(f"Error while compressing the file: {e}")
 
-    def detect_and_smooth_anomalies_optimized(
+    def detect_and_smooth_anomalies(
         df,
         space_columns=["parkovacich_mist_v_zps", "parkovacich_mist_celkem"],
         window_size=5,
@@ -400,6 +410,89 @@ def process_parked_cars():
             # Pandas aligns on index, so values go to the correct rows in df_out,
             # preserving the original DataFrame's order.
             df_out[column] = transformed_column
+
+        # --- Smoothing Impact Report ---
+        logging.info("--- Smoothing Impact Report ---")
+        for column_to_report in (
+            space_columns
+        ):  # Iterate using a different variable name to avoid confusion
+            original_series = df[
+                column_to_report
+            ]  # Original data from the input DataFrame
+            smoothed_series = df_out[
+                column_to_report
+            ]  # Smoothed data from the df_out DataFrame
+
+            # Mask for actual changes: True if (values differ AND not (both are NaN))
+            # .eq handles NaNs such that NaN.eq(NaN) is True.
+            actual_changes_mask = ~(
+                (original_series.eq(smoothed_series))
+                | (original_series.isna() & smoothed_series.isna())
+            )
+            num_changed = actual_changes_mask.sum()
+
+            if num_changed > 0:
+                # Value-to-value changes
+                value_to_value_changes_mask = (
+                    actual_changes_mask
+                    & original_series.notna()
+                    & smoothed_series.notna()
+                )
+                num_value_to_value_changed = value_to_value_changes_mask.sum()
+
+                sum_abs_diff_val_to_val = 0
+                avg_abs_diff_val_to_val = 0
+                if num_value_to_value_changed > 0:
+                    sum_abs_diff_val_to_val = (
+                        (
+                            original_series[value_to_value_changes_mask]
+                            - smoothed_series[value_to_value_changes_mask]
+                        )
+                        .abs()
+                        .sum()
+                    )
+                    avg_abs_diff_val_to_val = (
+                        sum_abs_diff_val_to_val / num_value_to_value_changed
+                    )
+
+                # Values that became NaN
+                value_became_nan_mask = (
+                    actual_changes_mask
+                    & original_series.notna()
+                    & smoothed_series.isna()
+                )
+                num_became_nan = value_became_nan_mask.sum()
+
+                # NaNs that became values
+                nan_became_value_mask = (
+                    actual_changes_mask
+                    & original_series.isna()
+                    & smoothed_series.notna()
+                )
+                num_became_value = nan_became_value_mask.sum()
+
+                log_message_parts = [
+                    f"Column '{column_to_report}': {num_changed} total points changed by smoothing."
+                ]
+                if num_value_to_value_changed > 0:
+                    log_message_parts.append(
+                        f"  - {num_value_to_value_changed} value-to-value changes: Sum abs diff = {sum_abs_diff_val_to_val:.2f}, Avg abs diff = {avg_abs_diff_val_to_val:.2f}"
+                    )
+                if num_became_nan > 0:
+                    log_message_parts.append(f"  - {num_became_nan} values became NaN.")
+                if num_became_value > 0:
+                    log_message_parts.append(
+                        f"  - {num_became_value} NaNs became values."
+                    )
+
+                logging.info("\\n".join(log_message_parts))
+
+            else:
+                logging.info(
+                    f"Column '{column_to_report}': No points were changed by smoothing."
+                )
+        logging.info("--- End of Smoothing Impact Report ---")
+        # --- End of Report ---
 
         return df_out
 
@@ -492,8 +585,30 @@ def process_parked_cars():
     # sort by date and oblast
     parked_cars_all_df.sort_values(["kod_useku", "date", "cast_dne"], inplace=True)
 
-    # detect and smooth anomalies
-    parked_cars_all_df = detect_and_smooth_anomalies_optimized(parked_cars_all_df)
+    # detect and smooth anomalies if the flag is set
+    if apply_anomaly_detection:
+        logging.info("Applying anomaly detection and smoothing...")
+        # Define the list of columns to apply smoothing to
+        columns_to_smooth = [
+            "parkovacich_mist_v_zps",
+            "parkovacich_mist_celkem",  # Original space capacity columns
+            "rezidentska",
+            "vlastnicka",
+            "abonentska",
+            "prenosna",  # Car types/statuses
+            "carsharing",
+            "ekologicka",
+            "ostatni",
+            "socialni",  # More car types/statuses
+            "navstevnici_platici",
+            "navstevnici_neplatici",  # Visitor types
+            "volna_mista",  # Free spots
+        ]
+        parked_cars_all_df = detect_and_smooth_anomalies(
+            parked_cars_all_df, space_columns=columns_to_smooth
+        )
+    else:
+        logging.info("Skipping anomaly detection and smoothing.")
 
     # export to CSV
     logging.info("Saving CSV...")
