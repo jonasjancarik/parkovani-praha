@@ -4,18 +4,29 @@ Sada skriptů a dat pro analýzu parkování v Praze. Data jsou získána z [por
 
 ## Instalace
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+Tento projekt používá `uv` pro správu závislostí a virtuálního prostředí.
+
+1.  **Nainstalujte `uv`**: Pokud ještě nemáte `uv` nainstalovaný, postupujte podle [oficiálních instrukcí](https://github.com/astral-sh/uv#installation).
+2.  **Vytvoření virtuálního prostředí a instalace závislostí**: V kořenovém adresáři projektu spusťte:
+    ```bash
+    uv sync
+    ```
+    Tento příkaz vytvoří `.venv` adresář (pokud neexistuje) a nainstaluje všechny potřebné závislosti definované v `pyproject.toml`.
+3.  **Aktivace virtuálního prostředí**:
+
+    Aktivace virtuálního prostředí je volitelná. Skripty můžete také spouštět přímo pomocí `uv run python <název_skriptu>.py`.
+
+    ```bash
+    source .venv/bin/activate
+    ```
+    (Pro Windows použijte `.venv\Scripts\activate`)
 
 ## Použití
 
 Snažím se data v projektu průběžně aktualizovat. Pro získání souborů pro analýzu by mělo stačit následující:
 
 - extrahovat soubor `data/processed/data_parking.csv.zip` do stejného adresáře;
-- spustit `python join.py` pro vytvoření souboru `data_parking_and_permits.csv` tamtéž.
+- spustit `uv run python join.py` pro vytvoření souboru `data_parking_and_permits.csv` tamtéž.
 
 Přehled datových souborů:
 
@@ -31,7 +42,7 @@ Přehled datových souborů:
 TLDR: 
 
 ```python
-python download.py && python process.py && python join.py
+uv run python download.py && uv run python process.py && uv run python join.py
 ```
 
 ### Stažení dat
@@ -41,7 +52,7 @@ Pro stažení dat je potřeba mít přístupové údaje k portálu TSK. Ty je po
 Samotné stažení obstárává skript `download.py`:
 
 ```bash
-python download.py
+uv run python download.py
 ```
 
 Soubory, které jsem již stáhl, jsou k dispozici přímo v tomto projektu. Z opatrnosti vzhledem k možným citlivým údajům nenahrávám data o adresách.
@@ -66,19 +77,19 @@ Pro správný běh přípravy dat je každopádně dobré stáhnout všechny typ
 Pro přípravu dat je potřeba spustit skript `process.py`:
 
 ```bash
-python process.py
+uv run python process.py
 ```
 
 Pro vytvoření souboru `data_parking_and_permits.csv`, který kombinuje data o využití parkovacích míst a data o vydaných povoleních:
 
 ```bash
-python join.py
+uv run python join.py
 ```
 
 Kompletní aktualizaci tedy provedete takto:
 
 ```bash
-python download.py && python process.py && python join.py
+uv run python download.py && uv run python process.py && uv run python join.py
 ```
 
 #### Podrobnější nastavení
@@ -86,7 +97,7 @@ python download.py && python process.py && python join.py
 Je také  možné vybrat jen určitý typ dat, který se má zpracovat:
 
 ```bash
-python process.py <typ-dat>
+uv run python process.py <typ-dat>
 ```
 
 - `parking` - využití parkovacích míst
@@ -99,10 +110,15 @@ Některé výstupy jsou podobné, respektive mají překryvy. Nejužitečnějš�
 
 Navíc je možné zpracovat následující podkladové soubory, které nespadají pod `all`:
 
-- `useky_na_zsj` - mapování úseků na základní sídelní jednotky 
+- `useky_na_zsj` - mapování úseků na základní sídelní jednotky
 - `domy_na_useky` - mapování domů na úseky
 
 Výsledné soubory těchto dvou skriptů jsou ale nahrané v projektu, takže pokud nedojde například k rozšíření zón, nemělo by být potřeba je spouštět.
+Pro spuštění těchto skriptů (a ostatních Python skriptů v projektu) s `uv` použijte:
+```bash
+uv run python src/mapping.py map_zones_to_areas # Příklad pro useky_na_zsj
+uv run python src/mapping.py map_buildings_to_zones # Příklad pro domy_na_useky
+```
 
 ## Analýza dat
 
