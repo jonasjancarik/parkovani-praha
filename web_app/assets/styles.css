@@ -1,0 +1,133 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Newsreader:wght@400;600&display=swap");
+
+:root {
+  --bg: #f6f1e7;
+  --bg-2: #efe3cf;
+  --ink: #1f1c17;
+  --accent: #d1495b;
+  --accent-2: #00798c;
+  --card: #fffaf1;
+  --muted: #6b655c;
+}
+
+body {
+  font-family: "Space Grotesk", "Newsreader", serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 10% 10%, rgba(209, 73, 91, 0.18), transparent 40%),
+    radial-gradient(circle at 90% 0%, rgba(0, 121, 140, 0.12), transparent 45%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+  margin: 0;
+  min-height: 100vh;
+}
+
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+.hero {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.hero-title {
+  font-size: clamp(2rem, 3vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.hero-subtitle {
+  font-family: "Newsreader", serif;
+  font-size: 1.1rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto 220px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.address-input {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(31, 28, 23, 0.15);
+  font-size: 1rem;
+  background: var(--card);
+}
+
+.primary-btn {
+  padding: 12px 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 12px 24px rgba(209, 73, 91, 0.25);
+}
+
+.primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 28px rgba(209, 73, 91, 0.3);
+}
+
+.cast-dne-dropdown {
+  font-size: 0.95rem;
+}
+
+.status {
+  margin: 8px 0 20px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.summary {
+  margin-bottom: 18px;
+}
+
+.summary-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: 0 18px 36px rgba(31, 28, 23, 0.08);
+}
+
+.summary-card h3 {
+  margin: 0 0 8px;
+}
+
+.summary-card p {
+  margin: 6px 0;
+  color: var(--muted);
+}
+
+.charts {
+  display: grid;
+  gap: 18px;
+}
+
+.charts .dash-graph {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 18px 36px rgba(31, 28, 23, 0.08);
+}
+
+@media (max-width: 900px) {
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  .primary-btn {
+    width: 100%;
+  }
+}
