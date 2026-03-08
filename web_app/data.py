@@ -1,4 +1,4 @@
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -46,6 +46,69 @@ def permits_base(df: pd.DataFrame) -> pd.DataFrame:
     ]
     base = df[cols].drop_duplicates(subset=["kod_useku", "date"])
     return base
+
+
+def zone_rows_for_cast_dne(
+    df: pd.DataFrame,
+    zone_codes: Sequence[str],
+    cast_dne: Optional[str],
+) -> pd.DataFrame:
+    scoped = df[df["kod_useku"].isin(zone_codes)].copy()
+    if scoped.empty:
+        return scoped
+
+    if cast_dne:
+        scoped["_cast_rank"] = (scoped["cast_dne"] != cast_dne).astype(int)
+        sort_cols = ["kod_useku", "date", "_cast_rank", "cast_dne"]
+    else:
+        sort_cols = ["kod_useku", "date", "cast_dne"]
+
+    scoped = scoped.sort_values(sort_cols).drop_duplicates(
+        subset=["kod_useku", "date"],
+        keep="first",
+    )
+    return scoped.drop(columns="_cast_rank", errors="ignore")
+
+
+def radius_spaces_series(
+    df: pd.DataFrame,
+    zone_codes: Sequence[str],
+    cast_dne: Optional[str],
+) -> pd.DataFrame:
+    scoped = zone_rows_for_cast_dne(df, zone_codes, cast_dne)
+    if scoped.empty:
+        return scoped
+
+    return (
+        scoped.groupby("date")[["parkovacich_mist_v_zps"]]
+        .sum()
+        .reset_index()
+        .sort_values("date")
+    )
+
+
+def radius_latest_snapshot(
+    df: pd.DataFrame,
+    zone_codes: Sequence[str],
+    cast_dne: Optional[str],
+) -> pd.DataFrame:
+    scoped = zone_rows_for_cast_dne(df, zone_codes, cast_dne)
+    if scoped.empty:
+        return scoped
+
+    cols = [
+        "kod_useku",
+        "naz_zsj",
+        "mestska_cast",
+        "typ_zony",
+        "parkovacich_mist_v_zps",
+    ]
+    return (
+        scoped.sort_values(["kod_useku", "date"])
+        .drop_duplicates(subset=["kod_useku"], keep="last")
+        .loc[:, cols]
+        .copy()
+    )
 
 
 def zsj_pop_per_space_series(

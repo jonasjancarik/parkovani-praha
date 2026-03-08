@@ -2,43 +2,82 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
+from pyproj import Transformer
 import requests
 from shapely.geometry import Point, shape
+from shapely.ops import transform
 from shapely.strtree import STRtree
 
 from config import ZONE_FILE_RE, ZONES_PATH, ZONES_TO_ZSJ_PATH
+
+WGS84 = "EPSG:4326"
+PRAGUE_METRIC_CRS = "EPSG:5514"
+_TO_METRIC = Transformer.from_crs(WGS84, PRAGUE_METRIC_CRS, always_xy=True)
 
 
 @dataclass(frozen=True)
 class Zone:
     code: str
     geometry: Any
+    geometry_metric: Any
+
+
+def project_geometry(geometry: Any) -> Any:
+    return transform(_TO_METRIC.transform, geometry)
 
 
 class ZoneIndex:
     def __init__(self, zones: Dict[str, Zone]) -> None:
         self._zones = zones
-        self._geoms = [zone.geometry for zone in zones.values()]
-        self._geom_by_id = {id(zone.geometry): zone for zone in zones.values()}
+        self._zone_list = list(zones.values())
+        self._geoms = [zone.geometry for zone in self._zone_list]
+        self._geoms_metric = [zone.geometry_metric for zone in self._zone_list]
         self._tree = STRtree(self._geoms) if self._geoms else None
+        self._metric_tree = STRtree(self._geoms_metric) if self._geoms_metric else None
+
+    def _zone_from_index(self, index: int) -> Zone:
+        return self._zone_list[int(index)]
 
     def find_zone(self, point: Point) -> Tuple[Optional[Zone], str]:
         if not self._tree:
             return None, "none"
 
         candidates = self._tree.query(point)
-        for geom in candidates:
-            if geom.covers(point):
-                return self._geom_by_id[id(geom)], "inside"
+        for index in candidates:
+            zone = self._zone_from_index(index)
+            if zone.geometry.covers(point):
+                return zone, "inside"
 
-        nearest_geom = self._tree.nearest(point)
-        if nearest_geom is None:
+        nearest_index = self._tree.nearest(point)
+        if nearest_index is None:
             return None, "none"
 
-        return self._geom_by_id[id(nearest_geom)], "nearest"
+        return self._zone_from_index(nearest_index), "nearest"
+
+    def find_zones_within_radius(
+        self,
+        point: Point,
+        radius_m: float,
+    ) -> List[Tuple[Zone, float]]:
+        if not self._metric_tree:
+            return []
+
+        point_metric = project_geometry(point)
+        search_area = point_metric.buffer(radius_m)
+        candidates = self._metric_tree.query(search_area)
+        matches: List[Tuple[Zone, float]] = []
+
+        for index in candidates:
+            zone = self._zone_from_index(index)
+            distance_m = float(zone.geometry_metric.distance(point_metric))
+            if distance_m <= radius_m:
+                matches.append((zone, distance_m))
+
+        matches.sort(key=lambda item: (item[1], item[0].code))
+        return matches
 
 
 def geocode_with_mapy_cz(query: str) -> Optional[Dict[str, Any]]:
@@ -116,7 +155,12 @@ def load_zone_index() -> ZoneIndex:
             if code in zones:
                 continue
             try:
-                zones[code] = Zone(code=code, geometry=shape(geom))
+                geometry = shape(geom)
+                zones[code] = Zone(
+                    code=code,
+                    geometry=geometry,
+                    geometry_metric=project_geometry(geometry),
+                )
             except Exception as exc:
                 logging.debug("Invalid geometry for %s: %s", code, exc)
 

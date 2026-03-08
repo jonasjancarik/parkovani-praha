@@ -1,7 +1,10 @@
 import re
+from dotenv import load_dotenv
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
+
 DATA_DIR = PROJECT_ROOT / "data"
 PARKING_PATH = DATA_DIR / "processed" / "data_parking_and_permits.csv"
 ZONES_PATH = DATA_DIR / "downloaded" / "parked_cars"

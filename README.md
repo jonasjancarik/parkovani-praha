@@ -48,6 +48,11 @@ uv run streamlit run web_app/app.py
 
 Pro hledání podle adresy nastavte `MAPY_CZ_API_KEY`.
 
+Adresní záložka ve web app nyní umí:
+- najít referenční úsek pro zadanou adresu;
+- spočítat zóny ZPS v okruhu 100–1500 m;
+- zobrazit vývoj součtu `parkovacich_mist_v_zps` v daném okruhu a tabulku nejbližších úseků.
+
 ## Sloupce ve finálním výstupu (`data_parking_and_permits.csv`)
 
 Hodnoty jsou vždy za dané časové okno ve sledovaném období (dle `cast_dne` a `date`).
