@@ -37,9 +37,97 @@ Přehled datových souborů:
 - `data_spaces.csv` - data o počtech parkovacích míst podle jednotlivých městských částí
 - `data_permits_and_spaces.csv` - kombinace předchozích dvou souborů
 
+## Web app (Streamlit)
+
+Spuštění:
+
+```bash
+uv sync
+uv run streamlit run web_app/app.py
+```
+
+Pro hledání podle adresy nastavte `MAPY_CZ_API_KEY`.
+
+## Sloupce ve finálním výstupu (`data_parking_and_permits.csv`)
+
+Hodnoty jsou vždy za dané časové okno ve sledovaném období (dle `cast_dne` a `date`).
+
+Poznámka k procentům z portálu: sloupce z grafů (domicil + typ oprávnění) a `rezidenti_do_500m`
+jsou v exportu přepočtené na odhad počtu obsazených míst:
+`(procento / 100) * obsazenost * parkovacich_mist_v_zps`.
+`obsazenost` a `respektovanost` zůstávají jako podíl 0–1.
+
+**Identifikace a čas**
+
+- `kod_useku` - tarifní kód úseku (CODE; prefix `PX` značí MČ).
+- `kod_zsj`, `naz_zsj` - kód a název základní sídelní jednotky (ZSJ).
+- `mestska_cast` - městská část (P01, P02, ...).
+- `typ_zony` - kategorie úseku (CATEGORY): `RES` rezidentní, `MIX` smíšený, `VIS` návštěvnický.
+- `cast_dne` - časové okno: `den`, `noc`, `Po-Pá`, `So-Ne`, případně `Po-Pá (MPD)`/`So-Ne (MPD)`.
+- `date` - první den měsíce (YYYY-MM-01).
+- `year` - rok extrahovaný z `date`.
+- `filename` - zdrojový soubor z portálu.
+
+**Kapacity, obsazenost, respektovanost**
+
+- `parkovacich_mist_celkem` - celkový počet míst v úseku (CELKEM_PS).
+- `parkovacich_mist_v_zps` - počet míst podléhajících režimu ZPS (PS_ZPS).
+- `obsazenost` - procento obsazenosti úseku (OBS; 0–1).
+- `respektovanost` - procento respektujících (platících) vozidel (RESP; 0–1).
+
+**Domicil vozidel (GRAF1)**
+
+- `rezidenti_do_125m` - podíl vozidel s domicilem do 125 m.
+- `rezidenti_od_126m_do_500m` - podíl vozidel s domicilem 126–500 m.
+- `rezidenti_od_501m_do_2000m` - podíl vozidel s domicilem 501–2000 m.
+- `rezidenti_nad_2000m` - podíl vozidel s domicilem nad 2000 m.
+- `navstevnici_platici` - podíl vozidel bez známého domicilu (návštěvnické parkování; VI).
+- `navstevnici_neplatici` - podíl vozidel bez parkovacího oprávnění (NR).
+- `volna_mista` - podíl volných míst (FR).
+- `rezidenti_do_500m` - původně ResPct (podíl držitelů oprávnění do 500 m).
+
+**Typ parkovacího oprávnění (GRAF2)**
+
+- `rezidentska` (R), `vlastnicka` (V), `abonentska` (A), `prenosna` (P).
+- `carsharing` (C), `ekologicka` (E), `ostatni` (O), `socialni` (S).
+- `navstevnici` - součet `navstevnici_platici` + `navstevnici_neplatici` + `prenosna`.
+- `soucet_vsech_typu` - součet všech kategorií + `volna_mista`.
+
+**Parkovací oprávnění v úseku (data z budov)**
+
+- `POP_CELKEM` - celkový počet vydaných parkovacích oprávnění v úseku.
+- `pop_rezidentska`, `pop_vlastnicka`, `pop_abonentska`, `pop_prenosna`.
+- `pop_carsharing`, `pop_ekologicka`, `pop_ostatni`, `pop_socialni`.
+  (význam zkratek viz níže ve "Slovníku zkratek")
+Pozn.: `POP_*` vs `pop_*` je jen rozdíl v názvu/slovníku; význam stejný.
+
+## Další výstupy (stručně)
+
+**`data_parking.csv`**
+
+- Shodné sloupce jako `data_parking_and_permits.csv`, ale bez `POP_*` a `year`.
+
+**`data_permits_by_zone.csv`**
+
+- `date`, `kod_useku`.
+- `POP_CELKEM` a `pop_*` = počty vydaných oprávnění v úseku podle typu (R/V/A/P/C/E/O/S).
+
+**`data_permits.csv`**
+
+- `date`, `Oblast` (městská část / subčást s tečkou).
+- `POP_R`, `POP_V`, `POP_A`, `POP_P`, `POP_C`, `POP_E`, `POP_O`, `POP_S`, `XSUM` (celkem).
+- `parent district` je pomocný sloupec pro agregaci subčástí.
+
+**`data_permits_and_spaces.csv`**
+
+- Kombinace `data_permits.csv` + `data_spaces.csv` po MČ.
+- `POP_*`, `POP_CELKEM` = počty oprávnění; `CELKEM_PS`, `PS_ZPS` = počty míst.
+- `RES_PS`, `MIX_PS`, `VIS_PS`, `OTH_PS` (+ `_ZPS`) = kapacity dle kategorie.
+- `POCINVST`, `PA_cnt`, `IB_cnt` = TODO: doplnit význam.
+
 ## Aktualizace dat
 
-TLDR: 
+TLDR:
 
 ```python
 uv run python download.py && uv run python process.py && uv run python join.py
