@@ -51,6 +51,8 @@ Pro hledání podle adresy nastavte `MAPY_CZ_API_KEY`.
 Adresní záložka ve web app nyní umí:
 - najít referenční úsek pro zadanou adresu;
 - spočítat zóny ZPS v okruhu 100–1500 m;
+- zobrazit výběr, okruh a zóny na interaktivní mapě;
+- vybrat bod kliknutím do mapy;
 - zobrazit vývoj součtu `parkovacich_mist_v_zps` v daném okruhu a tabulku nejbližších úseků.
 
 ## Sloupce ve finálním výstupu (`data_parking_and_permits.csv`)

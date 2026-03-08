@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -85,21 +86,18 @@ def geocode_with_mapy_cz(query: str) -> Optional[Dict[str, Any]]:
     if not api_key:
         return None
 
-    params = {
-        "query": query,
-        "limit": 15,
-        "locality": "Praha",
-        "type": "regional.address",
-        "apikey": api_key,
-    }
-
     try:
         for endpoint in ["geocode", "suggest"]:
-            response = requests.get(
-                f"https://api.mapy.cz/v1/{endpoint}", params=params, timeout=10
+            data = _mapy_geocode_request(
+                endpoint,
+                (
+                    ("query", query),
+                    ("limit", 15),
+                    ("locality", "Praha"),
+                    ("type", "regional.address"),
+                    ("apikey", api_key),
+                ),
             )
-            response.raise_for_status()
-            data = response.json()
             if data.get("items"):
                 result = data["items"][0]
                 result["endpoint"] = endpoint
@@ -107,6 +105,38 @@ def geocode_with_mapy_cz(query: str) -> Optional[Dict[str, Any]]:
         return None
     except Exception as exc:
         logging.error("Geocoding failed for '%s': %s", query, exc)
+        return None
+
+
+@lru_cache(maxsize=256)
+def _mapy_geocode_request(endpoint: str, params_key: Tuple[Tuple[str, Any], ...]) -> Dict[str, Any]:
+    params = dict(params_key)
+    response = requests.get(f"https://api.mapy.cz/v1/{endpoint}", params=params, timeout=10)
+    response.raise_for_status()
+    return response.json()
+
+
+def reverse_geocode_with_mapy_cz(lon: float, lat: float) -> Optional[Dict[str, Any]]:
+    api_key = os.getenv("MAPY_CZ_API_KEY")
+    if not api_key:
+        return None
+
+    try:
+        data = _mapy_geocode_request(
+            "rgeocode",
+            (
+                ("lon", round(lon, 6)),
+                ("lat", round(lat, 6)),
+                ("apikey", api_key),
+            ),
+        )
+        if data.get("items"):
+            result = data["items"][0]
+            result["endpoint"] = "rgeocode"
+            return result
+        return None
+    except Exception as exc:
+        logging.error("Reverse geocoding failed for '%s,%s': %s", lon, lat, exc)
         return None
 
 

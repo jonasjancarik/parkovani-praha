@@ -1,14 +1,28 @@
 import os
+from typing import Optional
 
+import folium
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from shapely.geometry import Point
+from shapely.geometry import Point, mapping
+from streamlit_folium import st_folium
 
 from analytics import style_figure
 from constants import POP_MEASURES
 from data import radius_latest_snapshot, radius_spaces_series
-from geo import extract_lon_lat, geocode_with_mapy_cz
+from geo import (
+    extract_lon_lat,
+    geocode_with_mapy_cz,
+    reverse_geocode_with_mapy_cz,
+)
+
+DEFAULT_CENTER = (50.0755, 14.4378)
+DEFAULT_ZOOM = 12
+ADDRESS_RESULT_KEY = "address_result"
+LAST_MAP_CLICK_KEY = "address_last_map_click"
+ADDRESS_QUERY_KEY = "address_query"
+ADDRESS_ERROR_KEY = "address_error"
 
 MATCH_LABELS = {
     "inside": "uvnitř zóny",
@@ -26,6 +40,47 @@ def safe_total(series: pd.Series) -> float:
         return 0.0
     numeric = pd.to_numeric(series, errors="coerce")
     return float(numeric.fillna(0).sum())
+
+
+def format_point_label(lon: float, lat: float) -> str:
+    return f"Bod z mapy ({lat:.5f}, {lon:.5f})"
+
+
+def resolve_point_result(
+    lon: float,
+    lat: float,
+    radius_m: int,
+    cast_dne: str,
+    zone_index,
+    label: Optional[str] = None,
+    source: str = "map",
+) -> Optional[dict]:
+    zone, match_type = zone_index.find_zone(Point(lon, lat))
+    if not zone:
+        return None
+
+    result_label = label
+    if not result_label:
+        reverse = reverse_geocode_with_mapy_cz(lon, lat)
+        reverse_label = (reverse or {}).get("label")
+        if reverse_label == "Adresa":
+            reverse_label = None
+        result_label = (
+            reverse_label
+            or (reverse or {}).get("name")
+            or format_point_label(lon, lat)
+        )
+
+    return {
+        "label": result_label,
+        "lon": lon,
+        "lat": lat,
+        "zone_code": zone.code,
+        "match_type": match_type,
+        "radius_m": radius_m,
+        "cast_dne": cast_dne,
+        "source": source,
+    }
 
 
 def build_zone_hits_table(
@@ -50,20 +105,103 @@ def build_zone_hits_table(
     return table.sort_values(["Vzdálenost (m)", "Úsek"]).reset_index(drop=True)
 
 
+def build_address_map(
+    address_result: Optional[dict],
+    zone_hits,
+    latest_snapshot: pd.DataFrame,
+) -> folium.Map:
+    if address_result:
+        center = (address_result["lat"], address_result["lon"])
+        zoom = 15
+    else:
+        center = DEFAULT_CENTER
+        zoom = DEFAULT_ZOOM
+
+    m = folium.Map(
+        location=center,
+        zoom_start=zoom,
+        tiles="CartoDB positron",
+        control_scale=True,
+    )
+
+    if not address_result:
+        return m
+
+    radius_m = int(address_result["radius_m"])
+    distance_lookup = {zone.code: distance_m for zone, distance_m in zone_hits}
+    spaces_lookup = {}
+    if not latest_snapshot.empty:
+        spaces_lookup = latest_snapshot.set_index("kod_useku")[
+            "parkovacich_mist_v_zps"
+        ].to_dict()
+
+    folium.Circle(
+        location=center,
+        radius=radius_m,
+        color="#d1495b",
+        weight=2,
+        fill=True,
+        fill_opacity=0.08,
+    ).add_to(m)
+
+    folium.Marker(
+        location=center,
+        tooltip=address_result["label"],
+        icon=folium.Icon(color="red", icon="map-marker", prefix="fa"),
+    ).add_to(m)
+
+    for zone, distance_m in zone_hits:
+        is_reference = zone.code == address_result["zone_code"]
+        color = "#d1495b" if is_reference else "#006d77"
+        popup_html = (
+            f"<strong>{zone.code}</strong><br>"
+            f"Vzdálenost: {round(distance_m)} m<br>"
+            f"Místa v ZPS: {format_int(spaces_lookup.get(zone.code, 0))}"
+        )
+        folium.GeoJson(
+            data={
+                "type": "Feature",
+                "geometry": mapping(zone.geometry),
+                "properties": {
+                    "code": zone.code,
+                    "distance_m": round(distance_lookup.get(zone.code, 0)),
+                },
+            },
+            style_function=lambda _, color=color, is_reference=is_reference: {
+                "fillColor": color,
+                "color": color,
+                "weight": 3 if is_reference else 1.5,
+                "fillOpacity": 0.28 if is_reference else 0.14,
+            },
+            popup=folium.Popup(popup_html, max_width=260),
+            tooltip=zone.code,
+        ).add_to(m)
+
+    return m
+
+
+def build_map_component_key(address_result: Optional[dict]) -> str:
+    if not address_result:
+        return "address_selection_map_empty"
+    return (
+        "address_selection_map_"
+        f"{round(address_result['lat'], 5)}_"
+        f"{round(address_result['lon'], 5)}"
+    )
+
+
 def render_radius_insight(
     data: pd.DataFrame,
     address_result: dict,
-    zone_index,
-) -> None:
-    point = Point(address_result["lon"], address_result["lat"])
+    zone_hits,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     cast_dne_addr = address_result["cast_dne"]
     radius_m = int(address_result["radius_m"])
-    zone_hits = zone_index.find_zones_within_radius(point, radius_m)
 
     st.markdown(f"### Okruh {radius_m} m")
     if not zone_hits:
         st.warning("V daném okruhu nejsou žádné zóny ZPS.")
-        return
+        return pd.DataFrame(), pd.DataFrame()
 
     zone_codes = [zone.code for zone, _ in zone_hits]
     series = radius_spaces_series(data, zone_codes, cast_dne_addr)
@@ -71,7 +209,7 @@ def render_radius_insight(
 
     if series.empty or latest_snapshot.empty:
         st.warning("Pro vybraný okruh nejsou dostupná data o parkovacích místech.")
-        return
+        return series, latest_snapshot
 
     latest_spaces = safe_total(series.iloc[[-1]]["parkovacich_mist_v_zps"])
     oldest_spaces = safe_total(series.iloc[[0]]["parkovacich_mist_v_zps"])
@@ -104,6 +242,55 @@ def render_radius_insight(
         hide_index=True,
         use_container_width=True,
     )
+    return series, latest_snapshot
+
+
+def sync_selection_controls(address_result: Optional[dict], radius_m: int, cast_dne: str):
+    if not address_result:
+        return None
+
+    updated = dict(address_result)
+    updated["radius_m"] = radius_m
+    updated["cast_dne"] = cast_dne
+    st.session_state[ADDRESS_RESULT_KEY] = updated
+    return updated
+
+
+def handle_map_click(
+    map_state: dict,
+    radius_m: int,
+    cast_dne_addr: str,
+    zone_index,
+) -> None:
+    clicked = map_state.get("last_clicked") if map_state else None
+    if not clicked:
+        return
+
+    lon = float(clicked["lng"])
+    lat = float(clicked["lat"])
+    click_key = (round(lon, 6), round(lat, 6))
+    if click_key == st.session_state.get(LAST_MAP_CLICK_KEY):
+        return
+
+    selection = resolve_point_result(
+        lon,
+        lat,
+        radius_m,
+        cast_dne_addr,
+        zone_index,
+        source="map",
+    )
+    st.session_state[LAST_MAP_CLICK_KEY] = click_key
+
+    if not selection:
+        st.session_state[ADDRESS_ERROR_KEY] = "Nenalezen žádný úsek pro vybraný bod."
+        st.rerun()
+        return
+
+    st.session_state[ADDRESS_RESULT_KEY] = selection
+    st.session_state[ADDRESS_QUERY_KEY] = selection["label"]
+    st.session_state[ADDRESS_ERROR_KEY] = None
+    st.rerun()
 
 
 def render_address_view(
@@ -117,8 +304,11 @@ def render_address_view(
     if not api_key:
         st.warning("MAPY_CZ_API_KEY chybí v prostředí.")
 
-    with st.form("address_form"):
-        address = st.text_input("Adresa v Praze", value="")
+    controls_left, controls_mid, controls_right = st.columns([2.4, 1, 1])
+    with controls_left:
+        address = st.text_input("Adresa v Praze", key=ADDRESS_QUERY_KEY)
+        search_clicked = st.button("Najít adresu", use_container_width=True)
+    with controls_mid:
         radius_m = st.slider(
             "Okruh (m)",
             min_value=100,
@@ -126,54 +316,87 @@ def render_address_view(
             value=500,
             step=100,
         )
+    with controls_right:
         cast_dne_addr = st.selectbox(
             "Část dne",
             cast_dne_values,
             index=0,
         )
-        submitted = st.form_submit_button("Najít adresu")
 
-    if submitted:
+    if search_clicked:
         result = geocode_with_mapy_cz(address)
         if not result:
-            st.error("Adresa nenalezena nebo chyba Mapy.cz.")
-            st.stop()
-        coords = extract_lon_lat(result)
-        if not coords:
-            st.error("Adresa bez souřadnic.")
-            st.stop()
-        lon, lat = coords
-        zone, match_type = zone_index.find_zone(Point(lon, lat))
-        if not zone:
-            st.error("Nenalezen žádný úsek pro souřadnice.")
-            st.stop()
-        st.session_state["address_result"] = {
-            "label": result.get("label") or address,
-            "lon": lon,
-            "lat": lat,
-            "zone_code": zone.code,
-            "match_type": match_type,
-            "radius_m": radius_m,
-            "cast_dne": cast_dne_addr,
-        }
+            st.session_state[ADDRESS_ERROR_KEY] = "Adresa nenalezena nebo chyba Mapy.cz."
+        else:
+            coords = extract_lon_lat(result)
+            if not coords:
+                st.session_state[ADDRESS_ERROR_KEY] = "Adresa bez souřadnic."
+            else:
+                selection = resolve_point_result(
+                    coords[0],
+                    coords[1],
+                    radius_m,
+                    cast_dne_addr,
+                    zone_index,
+                    label=result.get("label") or address,
+                    source="address",
+                )
+                if not selection:
+                    st.session_state[ADDRESS_ERROR_KEY] = (
+                        "Nenalezen žádný úsek pro zadanou adresu."
+                    )
+                else:
+                    st.session_state[ADDRESS_RESULT_KEY] = selection
+                    st.session_state[LAST_MAP_CLICK_KEY] = (
+                        round(selection["lon"], 6),
+                        round(selection["lat"], 6),
+                    )
+                    st.session_state[ADDRESS_ERROR_KEY] = None
 
-    address_result = st.session_state.get("address_result")
+    address_result = sync_selection_controls(
+        st.session_state.get(ADDRESS_RESULT_KEY),
+        radius_m,
+        cast_dne_addr,
+    )
+
+    zone_hits = []
+    latest_snapshot = pd.DataFrame()
+    if address_result:
+        point = Point(address_result["lon"], address_result["lat"])
+        zone_hits = zone_index.find_zones_within_radius(point, radius_m)
+        zone_codes = [zone.code for zone, _ in zone_hits]
+        latest_snapshot = radius_latest_snapshot(data, zone_codes, cast_dne_addr)
+
+    st.caption("Klikni do mapy pro výběr bodu. Adresní vyhledání i klik sdílí stejný okruh a část dne.")
+    map_state = st_folium(
+        build_address_map(address_result, zone_hits, latest_snapshot),
+        key=build_map_component_key(address_result),
+        height=480,
+        returned_objects=["last_clicked"],
+        use_container_width=True,
+    )
+    handle_map_click(map_state, radius_m, cast_dne_addr, zone_index)
+
+    error = st.session_state.get(ADDRESS_ERROR_KEY)
+    if error:
+        st.error(error)
+
     if not address_result:
-        st.info("Zadej adresu a spusť vyhledání.")
+        st.info("Zadej adresu nebo klikni do mapy.")
         st.stop()
 
     zone_code = address_result["zone_code"]
-    cast_dne_addr = address_result["cast_dne"]
     match_type = address_result["match_type"]
     zsj_meta = zsj_mapping.get(zone_code, {})
+    source_label = "mapa" if address_result.get("source") == "map" else "adresa"
     st.markdown(
-        f"**Adresa:** {address_result['label']}  \n"
+        f"**Výběr:** {address_result['label']} ({source_label})  \n"
         f"**Referenční úsek:** {zone_code} ({MATCH_LABELS.get(match_type, match_type)})  \n"
         f"**ZSJ:** {zsj_meta.get('kod_zsj', 'nezname')} - {zsj_meta.get('naz_zsj', 'nezname')}  \n"
         f"**Okruh:** {address_result['radius_m']} m"
     )
 
-    render_radius_insight(data, address_result, zone_index)
+    render_radius_insight(data, address_result, zone_hits)
 
     st.markdown("### Detail referenčního úseku")
     zone_data = data[(data["kod_useku"] == zone_code)]
