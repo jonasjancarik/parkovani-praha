@@ -57,6 +57,9 @@ Adresní záložka ve web app nyní umí:
 - zobrazit malé per-zóna grafy, aby bylo vidět změny po jednotlivých úsecích.
 - omezit adresní okruh jen na úseky ze stejné městské části jako vybraná adresa.
 
+Při načtení a zpracování dat se dočasné kapacitní režimy typu „skok nahoru a návrat zpět“
+u `parkovacich_mist_v_zps` / `parkovacich_mist_celkem` konzervativně čistí na stabilní baseline.
+
 ## Sloupce ve finálním výstupu (`data_parking_and_permits.csv`)
 
 Hodnoty jsou vždy za dané časové okno ve sledovaném období (dle `cast_dne` a `date`).

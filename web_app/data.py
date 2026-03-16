@@ -1,13 +1,21 @@
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+import numpy as np
 import pandas as pd
 
 from config import PARKING_PATH
+from src.parking_cleanup import apply_temporary_capacity_regime_cleanup
 
 
 def load_parking_data() -> pd.DataFrame:
     df = pd.read_csv(PARKING_PATH)
     df["date"] = pd.to_datetime(df["date"])
+    df = apply_temporary_capacity_regime_cleanup(
+        df,
+        code_col="kod_useku",
+        date_col="date",
+        capacity_cols=["parkovacich_mist_v_zps", "parkovacich_mist_celkem"],
+    )
     df["year"] = df["date"].dt.year
     df["month"] = df["date"].dt.month
     return df
@@ -70,12 +78,79 @@ def zone_rows_for_cast_dne(
     return scoped.drop(columns="_cast_rank", errors="ignore")
 
 
+def zone_capacity_history(
+    df: pd.DataFrame,
+    zone_codes: Sequence[str],
+    cast_dne: Optional[str],
+    value_col: str = "parkovacich_mist_v_zps",
+    gap_rel_tolerance: float = 0.10,
+    gap_abs_tolerance: float = 3.0,
+) -> pd.DataFrame:
+    scoped = zone_rows_for_cast_dne(df, zone_codes, cast_dne)
+    if scoped.empty:
+        return scoped
+
+    filled_groups = []
+    month_end = pd.offsets.MonthEnd()
+    meta_cols = [col for col in scoped.columns if col not in {"date", value_col}]
+
+    for zone_code, group in scoped.groupby("kod_useku"):
+        group = (
+            group.sort_values("date")
+            .drop_duplicates(subset=["date"], keep="last")
+            .set_index("date")
+        )
+        full_index = pd.date_range(group.index.min(), group.index.max(), freq=month_end)
+        group = group.reindex(full_index)
+        group.index.name = "date"
+        group["kod_useku"] = zone_code
+
+        for col in meta_cols:
+            if col == "kod_useku":
+                continue
+            group[col] = group[col].ffill().bfill()
+
+        prev_vals = group[value_col].ffill()
+        next_vals = group[value_col].bfill()
+        tolerance = np.maximum(
+            gap_abs_tolerance,
+            np.maximum(prev_vals.abs(), next_vals.abs()) * gap_rel_tolerance,
+        )
+        gap_fill_mask = (
+            group[value_col].isna()
+            & prev_vals.notna()
+            & next_vals.notna()
+            & ((prev_vals - next_vals).abs() <= tolerance)
+        )
+        if gap_fill_mask.any():
+            group.loc[gap_fill_mask, value_col] = (
+                (prev_vals + next_vals) / 2
+            ).round()[gap_fill_mask]
+
+        group = group[group[value_col].notna()].reset_index()
+        filled_groups.append(group)
+
+    filled = pd.concat(filled_groups, ignore_index=True)
+    coverage = filled.groupby("kod_useku")["date"].agg(["min", "max"])
+    if coverage.empty:
+        return filled
+
+    common_start = coverage["min"].max()
+    common_end = coverage["max"].min()
+    if common_start <= common_end:
+        filled = filled[
+            (filled["date"] >= common_start) & (filled["date"] <= common_end)
+        ].copy()
+
+    return filled
+
+
 def radius_spaces_series(
     df: pd.DataFrame,
     zone_codes: Sequence[str],
     cast_dne: Optional[str],
 ) -> pd.DataFrame:
-    scoped = zone_rows_for_cast_dne(df, zone_codes, cast_dne)
+    scoped = zone_capacity_history(df, zone_codes, cast_dne)
     if scoped.empty:
         return scoped
 

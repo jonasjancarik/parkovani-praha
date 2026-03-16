@@ -10,7 +10,7 @@ from streamlit_folium import st_folium
 
 from analytics import style_figure
 from constants import POP_MEASURES
-from data import radius_latest_snapshot, radius_spaces_series, zone_rows_for_cast_dne
+from data import radius_latest_snapshot, radius_spaces_series, zone_capacity_history
 from geo import (
     extract_lon_lat,
     geocode_with_mapy_cz,
@@ -338,7 +338,7 @@ def render_zone_small_multiples(
     latest_snapshot: pd.DataFrame,
 ) -> None:
     zone_codes = [zone.code for zone, _ in zone_hits]
-    zone_history = zone_rows_for_cast_dne(
+    zone_history = zone_capacity_history(
         data,
         zone_codes,
         address_result["cast_dne"],
@@ -353,7 +353,11 @@ def render_zone_small_multiples(
     }
 
     st.markdown("### Zóny v okruhu")
-    st.caption("Mini grafy ukazují vývoj `parkovacich_mist_v_zps` po jednotlivých úsecích.")
+    st.caption(
+        "Mini grafy ukazují vývoj `parkovacich_mist_v_zps` po jednotlivých úsecích. "
+        "Krátké vnitřní mezery ve zdroji se dopočítají jen když před i po mezeře zůstává kapacita stejná. "
+        "Agregát i karty jsou navíc oříznuté na společné období, kdy mají všechny zahrnuté zóny data."
+    )
     columns = st.columns(3)
 
     for idx, (zone, distance_m) in enumerate(zone_hits):
@@ -382,6 +386,11 @@ def render_zone_small_multiples(
                 )
                 st.plotly_chart(
                     build_zone_card_figure(history, is_reference),
+                    key=(
+                        f"zone_card_{zone.code}_"
+                        f"{address_result['radius_m']}_"
+                        f"{address_result['cast_dne']}"
+                    ),
                     use_container_width=True,
                     config={"displayModeBar": False},
                 )

@@ -4,6 +4,7 @@ import numpy as np
 import json
 import sys
 from src import mapping, utils
+from src.parking_cleanup import apply_temporary_capacity_regime_cleanup
 import logging
 from dotenv import load_dotenv
 import zipfile
@@ -577,6 +578,14 @@ def process_parked_cars(apply_anomaly_detection: bool = True):
         parked_cars_all_df["date"] = pd.to_datetime(
             year_month + "01", format="%Y%m%d"
         ) + pd.offsets.MonthEnd(0)
+
+        logging.info("Cleaning temporary capacity regimes...")
+        parked_cars_all_df = apply_temporary_capacity_regime_cleanup(
+            parked_cars_all_df,
+            code_col="CODE",
+            date_col="date",
+            capacity_cols=["PS_ZPS", "CELKEM_PS"],
+        )
 
         # rename columns to more readable names
         logging.info("Renaming columns...")

@@ -275,10 +275,11 @@ def style_figure(fig: go.Figure) -> go.Figure:
         margin=dict(l=20, r=20, t=40, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="var(--plotly-text-color)"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
     fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(gridcolor="rgba(0,0,0,0.08)")
+    fig.update_yaxes(gridcolor="var(--plotly-grid-color)")
     return fig
 
 

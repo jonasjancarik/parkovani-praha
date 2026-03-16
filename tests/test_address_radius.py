@@ -8,9 +8,13 @@ from shapely.geometry import Point, box
 WEB_APP_DIR = Path(__file__).resolve().parents[1] / "web_app"
 if str(WEB_APP_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_APP_DIR))
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-from data import radius_latest_snapshot, radius_spaces_series
+from data import radius_latest_snapshot, radius_spaces_series, zone_capacity_history
 from geo import Zone, ZoneIndex, project_geometry
+from src.parking_cleanup import apply_temporary_capacity_regime_cleanup
 from views_address import filter_zone_hits_to_same_area
 
 
@@ -140,6 +144,152 @@ class AddressRadiusTests(unittest.TestCase):
         self.assertEqual(reference_area, "P05")
         self.assertEqual(excluded_count, 1)
         self.assertEqual([zone.code for zone, _ in filtered_hits], ["A", "C"])
+
+    def test_temporary_capacity_regime_cleanup_reverts_transient_spike(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "kod_useku": "P5-1410",
+                    "date": "2021-01-31",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 65,
+                    "parkovacich_mist_celkem": 70,
+                },
+                {
+                    "kod_useku": "P5-1410",
+                    "date": "2021-02-28",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 245,
+                    "parkovacich_mist_celkem": 250,
+                },
+                {
+                    "kod_useku": "P5-1410",
+                    "date": "2021-02-28",
+                    "cast_dne": "Po-Pá (MPD)",
+                    "parkovacich_mist_v_zps": 245,
+                    "parkovacich_mist_celkem": 250,
+                },
+                {
+                    "kod_useku": "P5-1410",
+                    "date": "2022-11-30",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 245,
+                    "parkovacich_mist_celkem": 250,
+                },
+                {
+                    "kod_useku": "P5-1410",
+                    "date": "2022-12-31",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 66,
+                    "parkovacich_mist_celkem": 70,
+                },
+            ]
+        )
+        df["date"] = pd.to_datetime(df["date"])
+
+        cleaned = apply_temporary_capacity_regime_cleanup(
+            df,
+            code_col="kod_useku",
+            date_col="date",
+            capacity_cols=["parkovacich_mist_v_zps", "parkovacich_mist_celkem"],
+        )
+
+        spike_rows = cleaned[cleaned["date"].isin(pd.to_datetime(["2021-02-28", "2022-11-30"]))]
+        self.assertEqual(spike_rows["parkovacich_mist_v_zps"].tolist(), [66.0, 66.0, 66.0])
+        self.assertEqual(spike_rows["parkovacich_mist_celkem"].tolist(), [70.0, 70.0, 70.0])
+
+    def test_radius_series_fills_internal_zone_gaps_with_stable_capacity(self):
+        rows = [
+            {
+                "kod_useku": "A",
+                "date": "2019-04-30",
+                "cast_dne": "den",
+                "parkovacich_mist_v_zps": 19,
+                "naz_zsj": "ZSJ A",
+                "mestska_cast": "P05",
+                "typ_zony": "RES",
+            },
+            {
+                "kod_useku": "A",
+                "date": "2020-05-31",
+                "cast_dne": "den",
+                "parkovacich_mist_v_zps": 19,
+                "naz_zsj": "ZSJ A",
+                "mestska_cast": "P05",
+                "typ_zony": "RES",
+            },
+        ]
+        for date in pd.date_range("2019-04-30", "2020-05-31", freq="ME"):
+            rows.append(
+                {
+                    "kod_useku": "B",
+                    "date": date,
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 261,
+                    "naz_zsj": "ZSJ B",
+                    "mestska_cast": "P05",
+                    "typ_zony": "MIX",
+                }
+            )
+
+        df = pd.DataFrame(rows)
+        df["date"] = pd.to_datetime(df["date"])
+
+        history = zone_capacity_history(df, ["A", "B"], "den")
+        series = radius_spaces_series(df, ["A", "B"], "den")
+
+        may_2019 = history[(history["kod_useku"] == "A") & (history["date"] == "2019-05-31")]
+        self.assertEqual(may_2019["parkovacich_mist_v_zps"].iloc[0], 19)
+
+        may_2019_total = series.loc[series["date"] == "2019-05-31", "parkovacich_mist_v_zps"].iloc[0]
+        self.assertEqual(may_2019_total, 280)
+
+    def test_zone_capacity_history_trims_to_common_coverage_window(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "kod_useku": "A",
+                    "date": "2019-04-30",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 19,
+                    "naz_zsj": "ZSJ A",
+                    "mestska_cast": "P05",
+                    "typ_zony": "RES",
+                },
+                {
+                    "kod_useku": "A",
+                    "date": "2019-05-31",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 19,
+                    "naz_zsj": "ZSJ A",
+                    "mestska_cast": "P05",
+                    "typ_zony": "RES",
+                },
+                {
+                    "kod_useku": "B",
+                    "date": "2019-05-31",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 30,
+                    "naz_zsj": "ZSJ B",
+                    "mestska_cast": "P05",
+                    "typ_zony": "MIX",
+                },
+                {
+                    "kod_useku": "B",
+                    "date": "2019-06-30",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 30,
+                    "naz_zsj": "ZSJ B",
+                    "mestska_cast": "P05",
+                    "typ_zony": "MIX",
+                },
+            ]
+        )
+        df["date"] = pd.to_datetime(df["date"])
+
+        history = zone_capacity_history(df, ["A", "B"], "den")
+
+        self.assertEqual(history["date"].min(), pd.Timestamp("2019-05-31"))
 
 
 if __name__ == "__main__":
