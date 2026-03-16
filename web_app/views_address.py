@@ -10,7 +10,7 @@ from streamlit_folium import st_folium
 
 from analytics import style_figure
 from constants import POP_MEASURES
-from data import radius_latest_snapshot, radius_spaces_series
+from data import radius_latest_snapshot, radius_spaces_series, zone_rows_for_cast_dne
 from geo import (
     extract_lon_lat,
     geocode_with_mapy_cz,
@@ -22,6 +22,7 @@ DEFAULT_ZOOM = 12
 ADDRESS_RESULT_KEY = "address_result"
 LAST_MAP_CLICK_KEY = "address_last_map_click"
 ADDRESS_QUERY_KEY = "address_query"
+ADDRESS_QUERY_PENDING_KEY = "address_query_pending"
 ADDRESS_ERROR_KEY = "address_error"
 
 MATCH_LABELS = {
@@ -33,6 +34,14 @@ MATCH_LABELS = {
 
 def format_int(value: float) -> str:
     return f"{value:,.0f}".replace(",", " ")
+
+
+def format_signed_int(value: float) -> str:
+    if value > 0:
+        return f"+{format_int(value)}"
+    if value < 0:
+        return f"-{format_int(abs(value))}"
+    return "0"
 
 
 def safe_total(series: pd.Series) -> float:
@@ -103,6 +112,50 @@ def build_zone_hits_table(
         }
     )
     return table.sort_values(["Vzdálenost (m)", "Úsek"]).reset_index(drop=True)
+
+
+def build_zone_area_lookup(
+    data: pd.DataFrame,
+    zsj_mapping,
+    zone_codes,
+) -> dict[str, str]:
+    codes = list(dict.fromkeys(zone_codes))
+    if not codes:
+        return {}
+
+    lookup = (
+        data.loc[data["kod_useku"].isin(codes), ["kod_useku", "mestska_cast"]]
+        .dropna(subset=["mestska_cast"])
+        .drop_duplicates(subset=["kod_useku"])
+        .set_index("kod_useku")["mestska_cast"]
+        .to_dict()
+    )
+    for code in codes:
+        mapped_area = zsj_mapping.get(code, {}).get("mestska_cast")
+        if mapped_area:
+            lookup[code] = mapped_area
+    return lookup
+
+
+def filter_zone_hits_to_same_area(
+    data: pd.DataFrame,
+    zsj_mapping,
+    zone_hits,
+    reference_zone_code: str,
+) -> tuple[list, Optional[str], int]:
+    zone_codes = [zone.code for zone, _ in zone_hits] + [reference_zone_code]
+    area_lookup = build_zone_area_lookup(data, zsj_mapping, zone_codes)
+    reference_area = area_lookup.get(reference_zone_code)
+    if not reference_area:
+        return zone_hits, None, 0
+
+    filtered_hits = [
+        (zone, distance_m)
+        for zone, distance_m in zone_hits
+        if area_lookup.get(zone.code) == reference_area
+    ]
+    excluded_count = len(zone_hits) - len(filtered_hits)
+    return filtered_hits, reference_area, excluded_count
 
 
 def build_address_map(
@@ -242,7 +295,96 @@ def render_radius_insight(
         hide_index=True,
         use_container_width=True,
     )
+    render_zone_small_multiples(
+        data,
+        address_result,
+        zone_hits,
+        latest_snapshot,
+    )
     return series, latest_snapshot
+
+
+def build_zone_card_figure(zone_history: pd.DataFrame, is_reference: bool):
+    line_color = "#d1495b" if is_reference else "#006d77"
+    fill_color = "rgba(209, 73, 91, 0.16)" if is_reference else "rgba(0, 109, 119, 0.14)"
+    fig = px.line(
+        zone_history,
+        x="date",
+        y="parkovacich_mist_v_zps",
+        markers=False,
+    )
+    fig.update_traces(
+        line=dict(color=line_color, width=2),
+        fill="tozeroy",
+        fillcolor=fill_color,
+        hovertemplate="%{x|%m/%Y}<br>%{y:.0f} míst<extra></extra>",
+    )
+    fig.update_layout(
+        height=120,
+        margin=dict(l=0, r=0, t=4, b=0),
+        showlegend=False,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+    fig.update_xaxes(visible=False, fixedrange=True)
+    fig.update_yaxes(visible=False, fixedrange=True)
+    return fig
+
+
+def render_zone_small_multiples(
+    data: pd.DataFrame,
+    address_result: dict,
+    zone_hits,
+    latest_snapshot: pd.DataFrame,
+) -> None:
+    zone_codes = [zone.code for zone, _ in zone_hits]
+    zone_history = zone_rows_for_cast_dne(
+        data,
+        zone_codes,
+        address_result["cast_dne"],
+    )
+    if zone_history.empty:
+        return
+
+    snapshot_lookup = latest_snapshot.set_index("kod_useku").to_dict("index")
+    history_lookup = {
+        code: group.sort_values("date")
+        for code, group in zone_history.groupby("kod_useku")
+    }
+
+    st.markdown("### Zóny v okruhu")
+    st.caption("Mini grafy ukazují vývoj `parkovacich_mist_v_zps` po jednotlivých úsecích.")
+    columns = st.columns(3)
+
+    for idx, (zone, distance_m) in enumerate(zone_hits):
+        history = history_lookup.get(zone.code)
+        if history is None or history.empty:
+            continue
+
+        latest_spaces = safe_total(history.iloc[[-1]]["parkovacich_mist_v_zps"])
+        oldest_spaces = safe_total(history.iloc[[0]]["parkovacich_mist_v_zps"])
+        meta = snapshot_lookup.get(zone.code, {})
+        is_reference = zone.code == address_result["zone_code"]
+
+        with columns[idx % 3]:
+            with st.container(border=True):
+                title = f"**{zone.code}**"
+                if is_reference:
+                    title += " · referenční"
+                st.markdown(title)
+                st.caption(
+                    f"{meta.get('naz_zsj', 'Neznámá ZSJ')} · "
+                    f"{meta.get('typ_zony', 'n/a')} · "
+                    f"{round(distance_m)} m"
+                )
+                st.markdown(
+                    f"{format_int(latest_spaces)} míst · Δ {format_signed_int(latest_spaces - oldest_spaces)}"
+                )
+                st.plotly_chart(
+                    build_zone_card_figure(history, is_reference),
+                    use_container_width=True,
+                    config={"displayModeBar": False},
+                )
 
 
 def sync_selection_controls(address_result: Optional[dict], radius_m: int, cast_dne: str):
@@ -254,6 +396,12 @@ def sync_selection_controls(address_result: Optional[dict], radius_m: int, cast_
     updated["cast_dne"] = cast_dne
     st.session_state[ADDRESS_RESULT_KEY] = updated
     return updated
+
+
+def apply_pending_address_query() -> None:
+    pending_query = st.session_state.pop(ADDRESS_QUERY_PENDING_KEY, None)
+    if pending_query is not None:
+        st.session_state[ADDRESS_QUERY_KEY] = pending_query
 
 
 def handle_map_click(
@@ -288,7 +436,7 @@ def handle_map_click(
         return
 
     st.session_state[ADDRESS_RESULT_KEY] = selection
-    st.session_state[ADDRESS_QUERY_KEY] = selection["label"]
+    st.session_state[ADDRESS_QUERY_PENDING_KEY] = selection["label"]
     st.session_state[ADDRESS_ERROR_KEY] = None
     st.rerun()
 
@@ -303,6 +451,8 @@ def render_address_view(
     api_key = os.getenv("MAPY_CZ_API_KEY")
     if not api_key:
         st.warning("MAPY_CZ_API_KEY chybí v prostředí.")
+
+    apply_pending_address_query()
 
     controls_left, controls_mid, controls_right = st.columns([2.4, 1, 1])
     with controls_left:
@@ -361,9 +511,17 @@ def render_address_view(
 
     zone_hits = []
     latest_snapshot = pd.DataFrame()
+    reference_area = None
+    excluded_zone_count = 0
     if address_result:
         point = Point(address_result["lon"], address_result["lat"])
-        zone_hits = zone_index.find_zones_within_radius(point, radius_m)
+        raw_zone_hits = zone_index.find_zones_within_radius(point, radius_m)
+        zone_hits, reference_area, excluded_zone_count = filter_zone_hits_to_same_area(
+            data,
+            zsj_mapping,
+            raw_zone_hits,
+            address_result["zone_code"],
+        )
         zone_codes = [zone.code for zone, _ in zone_hits]
         latest_snapshot = radius_latest_snapshot(data, zone_codes, cast_dne_addr)
 
@@ -392,9 +550,14 @@ def render_address_view(
     st.markdown(
         f"**Výběr:** {address_result['label']} ({source_label})  \n"
         f"**Referenční úsek:** {zone_code} ({MATCH_LABELS.get(match_type, match_type)})  \n"
+        f"**Městská část pro okruh:** {reference_area or zsj_meta.get('mestska_cast', 'nezname')}  \n"
         f"**ZSJ:** {zsj_meta.get('kod_zsj', 'nezname')} - {zsj_meta.get('naz_zsj', 'nezname')}  \n"
         f"**Okruh:** {address_result['radius_m']} m"
     )
+    if excluded_zone_count:
+        st.caption(
+            f"Z okruhu bylo vyřazeno {excluded_zone_count} úseků z jiné městské části."
+        )
 
     render_radius_insight(data, address_result, zone_hits)
 

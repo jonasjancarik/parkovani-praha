@@ -11,6 +11,7 @@ if str(WEB_APP_DIR) not in sys.path:
 
 from data import radius_latest_snapshot, radius_spaces_series
 from geo import Zone, ZoneIndex, project_geometry
+from views_address import filter_zone_hits_to_same_area
 
 
 class AddressRadiusTests(unittest.TestCase):
@@ -107,6 +108,38 @@ class AddressRadiusTests(unittest.TestCase):
         self.assertEqual(series["parkovacich_mist_v_zps"].tolist(), [30, 32])
         self.assertEqual(snapshot["kod_useku"].tolist(), ["A", "B"])
         self.assertEqual(snapshot["parkovacich_mist_v_zps"].tolist(), [11, 21])
+
+    def test_radius_zone_hits_are_limited_to_same_mestska_cast(self):
+        zone_a_geom = box(14.4200, 50.0800, 14.4210, 50.0810)
+        zone_b_geom = box(14.4230, 50.0800, 14.4240, 50.0810)
+        zone_c_geom = box(14.4250, 50.0800, 14.4260, 50.0810)
+        zone_a = Zone("A", zone_a_geom, project_geometry(zone_a_geom))
+        zone_b = Zone("B", zone_b_geom, project_geometry(zone_b_geom))
+        zone_c = Zone("C", zone_c_geom, project_geometry(zone_c_geom))
+        df = pd.DataFrame(
+            [
+                {"kod_useku": "A", "mestska_cast": "P05"},
+                {"kod_useku": "B", "mestska_cast": "P01"},
+                {"kod_useku": "C", "mestska_cast": "P05"},
+            ]
+        )
+        zsj_mapping = {
+            "A": {"mestska_cast": "P05"},
+            "B": {"mestska_cast": "P01"},
+            "C": {"mestska_cast": "P05"},
+        }
+        zone_hits = [(zone_a, 0.0), (zone_b, 120.0), (zone_c, 240.0)]
+
+        filtered_hits, reference_area, excluded_count = filter_zone_hits_to_same_area(
+            df,
+            zsj_mapping,
+            zone_hits,
+            "A",
+        )
+
+        self.assertEqual(reference_area, "P05")
+        self.assertEqual(excluded_count, 1)
+        self.assertEqual([zone.code for zone, _ in filtered_hits], ["A", "C"])
 
 
 if __name__ == "__main__":
