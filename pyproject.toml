@@ -5,15 +5,21 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "geopandas>=1.0.1",
+    "folium>=0.20.0",
+    "geopandas>=1.1.2",
     "numpy>=2.2.6",
     "pandas>=2.2.3",
     "plotly>=6.0.0",
     "python-dateutil>=2.9.0.post0",
-    "python-dotenv>=1.1.0",
-    "requests>=2.32.3",
+    "python-dotenv>=1.2.2",
+    "requests>=2.33.0",
     "shapely>=2.1.1",
     "streamlit-folium>=0.26.2",
-    "streamlit>=1.52.2",
+    "streamlit>=1.54.0",
     "tqdm>=4.67.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
 ]
