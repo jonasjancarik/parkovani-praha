@@ -56,6 +56,10 @@ Adresní záložka ve web app nyní umí:
 - zobrazit vývoj součtu `parkovacich_mist_v_zps` v daném okruhu a tabulku nejbližších úseků.
 - respektovat boční filtry pro období, část dne, MČ, ZSJ a typ zóny;
 - zobrazit tlakové metriky pro návrh parkovací politiky: oprávnění na místo, obsazenost, respektovanost a počty úseků nad/pod prahovými hodnotami;
+- uložit vybraný adresní report do URL a znovu ho načíst ze sdíleného odkazu;
+- porovnat stejný bod napříč více okruhy;
+- stáhnout aktuální seznam úseků v CSV nebo GeoJSON;
+- seřadit úseky v aktuálním filtru podle tlakového skóre;
 - zobrazit malé per-zóna grafy, aby bylo vidět změny po jednotlivých úsecích.
 - omezit adresní okruh jen na úseky ze stejné městské části jako vybraná adresa.
 

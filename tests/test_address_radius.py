@@ -15,8 +15,12 @@ if str(ROOT_DIR) not in sys.path:
 from data import radius_latest_snapshot, radius_spaces_series, zone_capacity_history
 from geo import Zone, ZoneIndex, project_geometry
 from src.parking_cleanup import apply_temporary_capacity_regime_cleanup
-from views_address import (
+from address_exports import build_zone_hits_geojson
+from address_logic import (
+    address_query_params_to_selection_seed,
     build_radius_policy_metrics,
+    build_radius_scenario_row,
+    build_policy_pressure_ranking,
     filter_zone_hits_to_data_scope,
     filter_zone_hits_to_same_area,
     format_geocode_result_label,
@@ -206,6 +210,129 @@ class AddressRadiusTests(unittest.TestCase):
         self.assertAlmostEqual(metrics["respect"], 0.90)
         self.assertEqual(metrics["high_occupancy_zones"], 1)
         self.assertEqual(metrics["low_respect_zones"], 1)
+
+    def test_address_query_params_parse_shareable_selection_seed(self):
+        seed = address_query_params_to_selection_seed(
+            {
+                "address_label": "Vodičkova 1",
+                "address_lon": "14.422100",
+                "address_lat": "50.081100",
+                "address_radius": "900",
+                "address_cast": "noc",
+                "address_source": "address",
+            },
+            ["den", "noc"],
+        )
+
+        self.assertEqual(seed["label"], "Vodičkova 1")
+        self.assertEqual(seed["lon"], 14.4221)
+        self.assertEqual(seed["lat"], 50.0811)
+        self.assertEqual(seed["radius_m"], 900)
+        self.assertEqual(seed["cast_dne"], "noc")
+
+    def test_radius_scenario_row_summarizes_comparison_metrics(self):
+        zone_a_geom = box(14.4200, 50.0800, 14.4210, 50.0810)
+        zone_a = Zone("A", zone_a_geom, project_geometry(zone_a_geom))
+        df = pd.DataFrame(
+            [
+                {
+                    "kod_useku": "A",
+                    "date": "2025-01-31",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 10,
+                    "POP_CELKEM": 12,
+                    "obsazenost": 0.80,
+                    "respektovanost": 0.90,
+                    "naz_zsj": "ZSJ A",
+                    "mestska_cast": "P05",
+                    "typ_zony": "RES",
+                },
+                {
+                    "kod_useku": "A",
+                    "date": "2025-02-28",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 8,
+                    "POP_CELKEM": 12,
+                    "obsazenost": 0.95,
+                    "respektovanost": 0.70,
+                    "naz_zsj": "ZSJ A",
+                    "mestska_cast": "P05",
+                    "typ_zony": "RES",
+                },
+            ]
+        )
+        df["date"] = pd.to_datetime(df["date"])
+
+        row = build_radius_scenario_row(df, [(zone_a, 0.0)], "den", 500)
+
+        self.assertEqual(row["radius_m"], 500)
+        self.assertEqual(row["pocet_useku"], 1)
+        self.assertEqual(row["mista_v_zps"], 8)
+        self.assertEqual(row["zmena_mist"], -2)
+        self.assertAlmostEqual(row["opravneni_na_misto"], 1.5)
+        self.assertEqual(row["useky_vysoka_obsazenost"], 1)
+        self.assertEqual(row["useky_nizka_respektovanost"], 1)
+
+    def test_policy_pressure_ranking_orders_highest_pressure_first(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "kod_useku": "A",
+                    "date": "2025-02-28",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 10,
+                    "POP_CELKEM": 25,
+                    "obsazenost": 0.90,
+                    "respektovanost": 0.60,
+                    "naz_zsj": "ZSJ A",
+                    "mestska_cast": "P05",
+                    "typ_zony": "RES",
+                },
+                {
+                    "kod_useku": "B",
+                    "date": "2025-02-28",
+                    "cast_dne": "den",
+                    "parkovacich_mist_v_zps": 20,
+                    "POP_CELKEM": 10,
+                    "obsazenost": 0.50,
+                    "respektovanost": 0.95,
+                    "naz_zsj": "ZSJ B",
+                    "mestska_cast": "P05",
+                    "typ_zony": "MIX",
+                },
+            ]
+        )
+        df["date"] = pd.to_datetime(df["date"])
+
+        ranking = build_policy_pressure_ranking(df, "den", limit=2)
+
+        self.assertEqual(ranking["kod_useku"].tolist(), ["A", "B"])
+        self.assertGreater(ranking["tlakove_skore"].iloc[0], ranking["tlakove_skore"].iloc[1])
+
+    def test_zone_hits_geojson_exports_zone_geometry_and_snapshot_metrics(self):
+        zone_a_geom = box(14.4200, 50.0800, 14.4210, 50.0810)
+        zone_a = Zone("A", zone_a_geom, project_geometry(zone_a_geom))
+        snapshot = pd.DataFrame(
+            [
+                {
+                    "kod_useku": "A",
+                    "date": pd.Timestamp("2025-02-28"),
+                    "parkovacich_mist_v_zps": 8,
+                    "POP_CELKEM": 12,
+                }
+            ]
+        )
+
+        geojson = build_zone_hits_geojson(
+            snapshot,
+            [(zone_a, 12.4)],
+            {"label": "Test", "radius_m": 500, "cast_dne": "den", "zone_code": "A"},
+        )
+
+        self.assertIn('"FeatureCollection"', geojson)
+        self.assertIn('"kod_useku": "A"', geojson)
+        self.assertIn('"vzdalenost_m": 12', geojson)
+        self.assertIn('"referencni_usek": true', geojson)
 
     def test_temporary_capacity_regime_cleanup_reverts_transient_spike(self):
         df = pd.DataFrame(
