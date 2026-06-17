@@ -2,6 +2,7 @@ import os
 from typing import Optional
 
 import folium
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -24,6 +25,9 @@ LAST_MAP_CLICK_KEY = "address_last_map_click"
 ADDRESS_QUERY_KEY = "address_query"
 ADDRESS_QUERY_PENDING_KEY = "address_query_pending"
 ADDRESS_ERROR_KEY = "address_error"
+GENERIC_GEOCODE_LABELS = {"Adresa"}
+OCCUPANCY_PRESSURE_THRESHOLD = 0.85
+LOW_RESPECT_THRESHOLD = 0.80
 
 MATCH_LABELS = {
     "inside": "uvnitř zóny",
@@ -51,8 +55,43 @@ def safe_total(series: pd.Series) -> float:
     return float(numeric.fillna(0).sum())
 
 
+def format_ratio(value: Optional[float]) -> str:
+    if value is None or pd.isna(value):
+        return "n/a"
+    return f"{value:.2f}"
+
+
+def format_pct(value: Optional[float]) -> str:
+    if value is None or pd.isna(value):
+        return "n/a"
+    return f"{value:.0%}"
+
+
 def format_point_label(lon: float, lat: float) -> str:
     return f"Bod z mapy ({lat:.5f}, {lon:.5f})"
+
+
+def format_geocode_result_label(
+    result: Optional[dict],
+    fallback: str,
+) -> str:
+    if not result:
+        return fallback
+
+    label = result.get("label")
+    if label and label not in GENERIC_GEOCODE_LABELS:
+        return str(label)
+
+    name = result.get("name")
+    if name:
+        location = result.get("location")
+        if location:
+            locality = str(location).split(",")[0].strip()
+            if locality and locality not in str(name):
+                return f"{name}, {locality}"
+        return str(name)
+
+    return fallback
 
 
 def resolve_point_result(
@@ -71,13 +110,9 @@ def resolve_point_result(
     result_label = label
     if not result_label:
         reverse = reverse_geocode_with_mapy_cz(lon, lat)
-        reverse_label = (reverse or {}).get("label")
-        if reverse_label == "Adresa":
-            reverse_label = None
-        result_label = (
-            reverse_label
-            or (reverse or {}).get("name")
-            or format_point_label(lon, lat)
+        result_label = format_geocode_result_label(
+            reverse,
+            format_point_label(lon, lat),
         )
 
     return {
@@ -101,13 +136,21 @@ def build_zone_hits_table(
     table["vzdalenost_m"] = (
         table["kod_useku"].map(distances).fillna(0).round().astype(int)
     )
+    if {"POP_CELKEM", "parkovacich_mist_v_zps"}.issubset(table.columns):
+        spaces = pd.to_numeric(table["parkovacich_mist_v_zps"], errors="coerce")
+        permits = pd.to_numeric(table["POP_CELKEM"], errors="coerce")
+        table["opravneni_na_misto"] = np.where(spaces > 0, permits / spaces, np.nan)
     table = table.rename(
         columns={
             "kod_useku": "Úsek",
             "naz_zsj": "ZSJ",
             "mestska_cast": "MČ",
             "typ_zony": "Typ zóny",
+            "POP_CELKEM": "Oprávnění",
             "parkovacich_mist_v_zps": "Místa v ZPS",
+            "opravneni_na_misto": "Oprávnění / místo",
+            "obsazenost": "Obsazenost",
+            "respektovanost": "Respektovanost",
             "vzdalenost_m": "Vzdálenost (m)",
         }
     )
@@ -156,6 +199,77 @@ def filter_zone_hits_to_same_area(
     ]
     excluded_count = len(zone_hits) - len(filtered_hits)
     return filtered_hits, reference_area, excluded_count
+
+
+def filter_zone_hits_to_data_scope(
+    data: pd.DataFrame,
+    zone_hits,
+    reference_zone_code: str,
+) -> tuple[list, int, bool]:
+    available_codes = set(data["kod_useku"].dropna().unique())
+    filtered_hits = [
+        (zone, distance_m)
+        for zone, distance_m in zone_hits
+        if zone.code in available_codes
+    ]
+    excluded_count = len(zone_hits) - len(filtered_hits)
+    return filtered_hits, excluded_count, reference_zone_code in available_codes
+
+
+def weighted_average(
+    df: pd.DataFrame,
+    value_col: str,
+    weight_col: str,
+) -> Optional[float]:
+    if value_col not in df.columns or weight_col not in df.columns:
+        return None
+
+    values = pd.to_numeric(df[value_col], errors="coerce")
+    weights = pd.to_numeric(df[weight_col], errors="coerce")
+    mask = values.notna() & weights.notna() & (weights > 0)
+    if not mask.any():
+        return None
+
+    return float((values[mask] * weights[mask]).sum() / weights[mask].sum())
+
+
+def build_radius_policy_metrics(snapshot: pd.DataFrame) -> dict:
+    spaces = safe_total(snapshot.get("parkovacich_mist_v_zps", pd.Series(dtype=float)))
+    permits = safe_total(snapshot.get("POP_CELKEM", pd.Series(dtype=float)))
+    permits_per_space = permits / spaces if spaces > 0 else None
+
+    occupancy = weighted_average(
+        snapshot,
+        "obsazenost",
+        "parkovacich_mist_v_zps",
+    )
+    respect = weighted_average(
+        snapshot,
+        "respektovanost",
+        "parkovacich_mist_v_zps",
+    )
+
+    high_occupancy_zones = 0
+    if "obsazenost" in snapshot.columns:
+        occupancy_values = pd.to_numeric(snapshot["obsazenost"], errors="coerce")
+        high_occupancy_zones = int(
+            (occupancy_values >= OCCUPANCY_PRESSURE_THRESHOLD).sum()
+        )
+
+    low_respect_zones = 0
+    if "respektovanost" in snapshot.columns:
+        respect_values = pd.to_numeric(snapshot["respektovanost"], errors="coerce")
+        low_respect_zones = int(
+            (respect_values < LOW_RESPECT_THRESHOLD).sum()
+        )
+
+    return {
+        "permits_per_space": permits_per_space,
+        "occupancy": occupancy,
+        "respect": respect,
+        "high_occupancy_zones": high_occupancy_zones,
+        "low_respect_zones": low_respect_zones,
+    }
 
 
 def build_address_map(
@@ -272,6 +386,29 @@ def render_radius_insight(
     metric_cols[0].metric("Úseků v okruhu", format_int(len(zone_hits)))
     metric_cols[1].metric("Místa v ZPS", format_int(latest_spaces))
     metric_cols[2].metric("Změna od začátku", format_int(spaces_delta))
+
+    policy_metrics = build_radius_policy_metrics(latest_snapshot)
+    pressure_cols = st.columns(5)
+    pressure_cols[0].metric(
+        "Oprávnění / místo",
+        format_ratio(policy_metrics["permits_per_space"]),
+    )
+    pressure_cols[1].metric(
+        "Obsazenost",
+        format_pct(policy_metrics["occupancy"]),
+    )
+    pressure_cols[2].metric(
+        "Respektovanost",
+        format_pct(policy_metrics["respect"]),
+    )
+    pressure_cols[3].metric(
+        "Úseky >85 % obs.",
+        format_int(policy_metrics["high_occupancy_zones"]),
+    )
+    pressure_cols[4].metric(
+        "Úseky <80 % resp.",
+        format_int(policy_metrics["low_respect_zones"]),
+    )
 
     fig_spaces = px.line(
         series,
@@ -461,6 +598,10 @@ def render_address_view(
     if not api_key:
         st.warning("MAPY_CZ_API_KEY chybí v prostředí.")
 
+    if data.empty or not cast_dne_values:
+        st.warning("Boční filtry nevrací žádná data pro adresní report.")
+        return
+
     apply_pending_address_query()
 
     controls_left, controls_mid, controls_right = st.columns([2.4, 1, 1])
@@ -497,7 +638,7 @@ def render_address_view(
                     radius_m,
                     cast_dne_addr,
                     zone_index,
-                    label=result.get("label") or address,
+                    label=format_geocode_result_label(result, address),
                     source="address",
                 )
                 if not selection:
@@ -522,19 +663,31 @@ def render_address_view(
     latest_snapshot = pd.DataFrame()
     reference_area = None
     excluded_zone_count = 0
+    data_scope_excluded_count = 0
+    reference_in_scope = True
     if address_result:
         point = Point(address_result["lon"], address_result["lat"])
         raw_zone_hits = zone_index.find_zones_within_radius(point, radius_m)
+        scoped_zone_hits, data_scope_excluded_count, reference_in_scope = (
+            filter_zone_hits_to_data_scope(
+                data,
+                raw_zone_hits,
+                address_result["zone_code"],
+            )
+        )
         zone_hits, reference_area, excluded_zone_count = filter_zone_hits_to_same_area(
             data,
             zsj_mapping,
-            raw_zone_hits,
+            scoped_zone_hits,
             address_result["zone_code"],
         )
         zone_codes = [zone.code for zone, _ in zone_hits]
         latest_snapshot = radius_latest_snapshot(data, zone_codes, cast_dne_addr)
 
-    st.caption("Klikni do mapy pro výběr bodu. Adresní vyhledání i klik sdílí stejný okruh a část dne.")
+    st.caption(
+        "Klikni do mapy pro výběr bodu. Adresní vyhledání i klik sdílí stejný okruh a část dne. "
+        "Adresní report respektuje boční filtry."
+    )
     map_state = st_folium(
         build_address_map(address_result, zone_hits, latest_snapshot),
         key=build_map_component_key(address_result),
@@ -567,6 +720,14 @@ def render_address_view(
         st.caption(
             f"Z okruhu bylo vyřazeno {excluded_zone_count} úseků z jiné městské části."
         )
+    if data_scope_excluded_count:
+        st.caption(
+            f"Počet úseků vyřazených bočními filtry: {data_scope_excluded_count}."
+        )
+    if not reference_in_scope:
+        st.caption(
+            "Referenční úsek neodpovídá bočním filtrům, proto není zahrnut do metrik okruhu."
+        )
 
     render_radius_insight(data, address_result, zone_hits)
 
@@ -574,7 +735,8 @@ def render_address_view(
     zone_data = data[(data["kod_useku"] == zone_code)]
     zone_data = zone_data[zone_data["cast_dne"] == cast_dne_addr]
     if zone_data.empty:
-        zone_data = data[data["kod_useku"] == zone_code]
+        st.info("Referenční úsek není v aktuálních bočních filtrech.")
+        return
 
     oldest_date = zone_data["date"].min()
     newest_date = zone_data["date"].max()

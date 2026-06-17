@@ -15,7 +15,12 @@ if str(ROOT_DIR) not in sys.path:
 from data import radius_latest_snapshot, radius_spaces_series, zone_capacity_history
 from geo import Zone, ZoneIndex, project_geometry
 from src.parking_cleanup import apply_temporary_capacity_regime_cleanup
-from views_address import filter_zone_hits_to_same_area
+from views_address import (
+    build_radius_policy_metrics,
+    filter_zone_hits_to_data_scope,
+    filter_zone_hits_to_same_area,
+    format_geocode_result_label,
+)
 
 
 class AddressRadiusTests(unittest.TestCase):
@@ -144,6 +149,63 @@ class AddressRadiusTests(unittest.TestCase):
         self.assertEqual(reference_area, "P05")
         self.assertEqual(excluded_count, 1)
         self.assertEqual([zone.code for zone, _ in filtered_hits], ["A", "C"])
+
+    def test_radius_zone_hits_are_limited_to_current_data_scope(self):
+        zone_a_geom = box(14.4200, 50.0800, 14.4210, 50.0810)
+        zone_b_geom = box(14.4230, 50.0800, 14.4240, 50.0810)
+        zone_a = Zone("A", zone_a_geom, project_geometry(zone_a_geom))
+        zone_b = Zone("B", zone_b_geom, project_geometry(zone_b_geom))
+        df = pd.DataFrame([{"kod_useku": "A"}])
+        zone_hits = [(zone_a, 0.0), (zone_b, 120.0)]
+
+        filtered_hits, excluded_count, reference_in_scope = filter_zone_hits_to_data_scope(
+            df,
+            zone_hits,
+            "A",
+        )
+
+        self.assertEqual([zone.code for zone, _ in filtered_hits], ["A"])
+        self.assertEqual(excluded_count, 1)
+        self.assertTrue(reference_in_scope)
+
+    def test_mapy_generic_address_label_uses_specific_name(self):
+        result = {
+            "label": "Adresa",
+            "name": "Vodičkova 1/1",
+            "location": "Praha 2 - Nové Město, Česko",
+        }
+
+        label = format_geocode_result_label(result, "Vodičkova 1, Praha")
+
+        self.assertEqual(label, "Vodičkova 1/1, Praha 2 - Nové Město")
+
+    def test_radius_policy_metrics_surface_pressure_indicators(self):
+        snapshot = pd.DataFrame(
+            [
+                {
+                    "kod_useku": "A",
+                    "parkovacich_mist_v_zps": 10,
+                    "POP_CELKEM": 15,
+                    "obsazenost": 0.90,
+                    "respektovanost": 0.75,
+                },
+                {
+                    "kod_useku": "B",
+                    "parkovacich_mist_v_zps": 30,
+                    "POP_CELKEM": 15,
+                    "obsazenost": 0.60,
+                    "respektovanost": 0.95,
+                },
+            ]
+        )
+
+        metrics = build_radius_policy_metrics(snapshot)
+
+        self.assertAlmostEqual(metrics["permits_per_space"], 0.75)
+        self.assertAlmostEqual(metrics["occupancy"], 0.675)
+        self.assertAlmostEqual(metrics["respect"], 0.90)
+        self.assertEqual(metrics["high_occupancy_zones"], 1)
+        self.assertEqual(metrics["low_respect_zones"], 1)
 
     def test_temporary_capacity_regime_cleanup_reverts_transient_spike(self):
         df = pd.DataFrame(

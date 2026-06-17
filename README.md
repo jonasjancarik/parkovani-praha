@@ -54,6 +54,8 @@ Adresní záložka ve web app nyní umí:
 - zobrazit výběr, okruh a zóny na interaktivní mapě;
 - vybrat bod kliknutím do mapy;
 - zobrazit vývoj součtu `parkovacich_mist_v_zps` v daném okruhu a tabulku nejbližších úseků.
+- respektovat boční filtry pro období, část dne, MČ, ZSJ a typ zóny;
+- zobrazit tlakové metriky pro návrh parkovací politiky: oprávnění na místo, obsazenost, respektovanost a počty úseků nad/pod prahovými hodnotami;
 - zobrazit malé per-zóna grafy, aby bylo vidět změny po jednotlivých úsecích.
 - omezit adresní okruh jen na úseky ze stejné městské části jako vybraná adresa.
 

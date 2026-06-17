@@ -186,4 +186,5 @@ with tab_tableau:
     )
 
 with tab_address:
-    render_address_view(data, zone_index, zsj_mapping, cast_dne_values)
+    address_cast_dne_values = sorted(filtered["cast_dne"].dropna().unique())
+    render_address_view(filtered, zone_index, zsj_mapping, address_cast_dne_values)

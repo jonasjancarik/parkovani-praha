@@ -171,13 +171,18 @@ def radius_latest_snapshot(
     if scoped.empty:
         return scoped
 
-    cols = [
+    wanted_cols = [
         "kod_useku",
         "naz_zsj",
         "mestska_cast",
         "typ_zony",
+        "date",
+        "POP_CELKEM",
         "parkovacich_mist_v_zps",
+        "obsazenost",
+        "respektovanost",
     ]
+    cols = [col for col in wanted_cols if col in scoped.columns]
     return (
         scoped.sort_values(["kod_useku", "date"])
         .drop_duplicates(subset=["kod_useku"], keep="last")

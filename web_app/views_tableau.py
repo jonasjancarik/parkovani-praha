@@ -56,29 +56,35 @@ def render_tableau_view(
         st.info("Zvol filtry a typy parkujících.")
     else:
         selected_cols = [PARKER_MEASURES[label] for label in selected_parker]
-        parkujici = lod_include_avg(filtered, ["typ_zony"], selected_cols)
+        parkujici = lod_include_avg(filtered, ["mestska_cast"], selected_cols)
         melted = parkujici.melt(
-            id_vars=["typ_zony"],
+            id_vars=["mestska_cast"],
             value_vars=selected_cols,
             var_name="measure",
             value_name="value",
         )
         label_map = {v: k for k, v in PARKER_MEASURES.items()}
         melted["label"] = melted["measure"].map(label_map)
-        if melted["typ_zony"].nunique() > 1:
-            fig_parkujici = px.pie(
-                melted,
-                values="value",
-                names="label",
-                facet_col="typ_zony",
-            )
+        melted["total"] = melted.groupby("mestska_cast")["value"].transform("sum")
+        melted = melted[melted["total"] > 0].copy()
+        if melted.empty:
+            st.info("Vybrané typy parkujících nemají pro zvolené filtry hodnoty.")
         else:
-            fig_parkujici = px.pie(
+            melted["share"] = melted["value"] / melted["total"]
+            fig_parkujici = px.bar(
                 melted,
-                values="value",
-                names="label",
+                x="mestska_cast",
+                y="share",
+                color="label",
+                labels={
+                    "mestska_cast": "Městská část",
+                    "share": "Podíl",
+                    "label": "Typ parkujících",
+                },
             )
-        st.plotly_chart(style_figure(fig_parkujici), use_container_width=True)
+            fig_parkujici.update_layout(barmode="stack")
+            fig_parkujici.update_yaxes(tickformat=".0%")
+            st.plotly_chart(style_figure(fig_parkujici), use_container_width=True)
 
     st.subheader("Vývoj počtu parkovacích míst")
     if filtered.empty:
