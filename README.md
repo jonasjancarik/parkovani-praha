@@ -46,6 +46,26 @@ uv sync
 uv run streamlit run web_app/app.py
 ```
 
+## React Data Explorer
+
+The React explorer reuses the existing Python data layer through a small FastAPI API.
+
+Start the API:
+
+```bash
+uv run uvicorn web_app.api:app --reload --port 8000
+```
+
+Start the frontend in another terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The selected visual reference and implementation notes live in `docs/design/`.
+
 Pro hledání podle adresy nastavte `MAPY_CZ_API_KEY`.
 
 Adresní záložka ve web app nyní umí:

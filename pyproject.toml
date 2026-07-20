@@ -17,6 +17,8 @@ dependencies = [
     "streamlit-folium>=0.26.2",
     "streamlit>=1.54.0",
     "tqdm>=4.67.1",
+    "fastapi>=0.139.2",
+    "uvicorn>=0.46.0",
 ]
 
 [dependency-groups]

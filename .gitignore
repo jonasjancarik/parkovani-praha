@@ -156,3 +156,12 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 .DS_Store
+
+# React explorer build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.npm-cache/
+
+# Local visual-comparison captures
+docs/design/implementation-*.png
+docs/design/comparison-*.png
