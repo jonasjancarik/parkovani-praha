@@ -12,7 +12,7 @@ the same visual tokens and shared filters while covering all nine original chart
 questions without reproducing the Streamlit page as a long sequence of unrelated
 chart blocks.
 
-On desktop, the shared filters and address search remain visible while the reader
-scrolls through the analysis. At tablet and phone widths the toolbar stays in the
-document flow, with the address search moving below the filters before the controls
-can collide or crowd the available chart space.
+On wide desktop screens, the shared filters and address search remain visible while
+the reader scrolls through the analysis. In compact desktop, tablet, and phone
+layouts the toolbar stays in the document flow, with the address search moving below
+the filters before the controls can collide or crowd the available chart space.

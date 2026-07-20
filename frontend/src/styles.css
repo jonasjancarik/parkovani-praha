@@ -460,14 +460,17 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   font-size: 9px;
 }
 
-@media (max-width: 1100px) {
-  .app-shell { padding-inline: 24px; }
-  .explorer-head { grid-template-columns: 1fr 270px; }
-  .explainer { display: none; }
+@media (max-width: 1365px) {
   .sticky-toolbar { position: static; grid-template-columns: 1fr; }
   .filter-bar { padding-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .toolbar-search { justify-content: flex-end; border-left: 0; padding: 15px 0; }
   .toolbar-search .address-search { width: min(286px, 100%); }
+}
+
+@media (max-width: 1100px) {
+  .app-shell { padding-inline: 24px; }
+  .explorer-head { grid-template-columns: 1fr 270px; }
+  .explainer { display: none; }
   .workspace-grid { grid-template-columns: 1fr 250px; }
   .district-content { grid-template-columns: 1fr; height: auto; }
   .district-content table { display: none; }
