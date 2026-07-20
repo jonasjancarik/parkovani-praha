@@ -312,6 +312,138 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
 .map-search > div { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--ink); padding: 9px 0; }
 .map-search input { flex: 1; border: 0; outline: 0; background: transparent; }
 
+.analytics-sections {
+  border-top: 1px solid var(--ink);
+  margin-top: 48px;
+}
+.analytics-intro {
+  min-height: 82px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 25px 0 18px;
+  border-bottom: 1px solid var(--rule);
+}
+.analytics-intro span {
+  font: 400 30px/1.1 "Newsreader", Georgia, serif;
+}
+.analytics-intro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.analysis-section {
+  padding: 26px 0 28px;
+  border-bottom: 1px solid var(--rule);
+}
+.analysis-heading {
+  min-height: 44px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.analysis-heading h2 {
+  margin: 0;
+  font: 400 21px/1.15 "Newsreader", Georgia, serif;
+}
+.analysis-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.chart-toggle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #c9c3b8;
+}
+.chart-toggle button {
+  position: relative;
+  border: 0;
+  padding: 8px 12px 9px;
+  background: transparent;
+  color: #5d5952;
+  font-size: 10px;
+  cursor: pointer;
+}
+.chart-toggle button.active { color: var(--red); }
+.chart-toggle button.active::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--red);
+}
+.analysis-chart { width: 100%; height: 320px; }
+.analysis-chart-wide { height: 350px; }
+.composition-section { padding-block: 0; }
+.composition-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, .72fr) minmax(0, 1.55fr);
+}
+.composition-panel { min-width: 0; padding: 27px 24px 25px 0; }
+.parker-composition {
+  border-left: 1px solid var(--rule);
+  padding-left: 26px;
+  padding-right: 0;
+}
+.zone-mix-chart { width: 100%; height: 86px; }
+.zone-legend { margin: 2px 0 0; }
+.zone-legend > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 0;
+  border-top: 1px solid #e1dcd3;
+  font-size: 10px;
+}
+.zone-legend dt { color: #34332e; }
+.zone-legend dd { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.parker-share-chart { width: 100%; height: 315px; }
+.change-chart { height: 340px; }
+.pressure-forecast-section { padding-block: 0; }
+.pressure-forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.pressure-forecast-grid > div { min-width: 0; padding: 27px 25px 26px 0; }
+.pressure-forecast-grid > div + div {
+  border-left: 1px solid var(--rule);
+  padding-left: 26px;
+  padding-right: 0;
+}
+.pressure-chart, .forecast-chart { height: 310px; }
+.forecast-select {
+  flex: 0 0 158px;
+  display: grid;
+  gap: 4px;
+  margin-top: -8px;
+}
+.forecast-select span { font-size: 9px; color: var(--muted); }
+.forecast-select select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid #c8c2b7;
+  border-radius: 5px;
+  padding: 0 28px 0 9px;
+  background: rgba(255,255,255,.35);
+  color: #5f5b54;
+  font-size: 10px;
+}
+.forecast-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -3px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+}
+
 @media (max-width: 1100px) {
   .app-shell { padding-inline: 24px; }
   .explorer-head { grid-template-columns: 1fr 270px; }
@@ -320,6 +452,10 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .workspace-grid { grid-template-columns: 1fr 250px; }
   .district-content { grid-template-columns: 1fr; height: auto; }
   .district-content table { display: none; }
+  .composition-grid { grid-template-columns: 1fr; }
+  .parker-composition { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }
+  .pressure-forecast-grid { grid-template-columns: 1fr; }
+  .pressure-forecast-grid > div + div { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }
 }
 
 @media (max-width: 760px) {
@@ -336,4 +472,14 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .chart-section { height: 380px; }
   .time-chart { height: 325px; }
   .map-empty-state { grid-template-columns: 1fr; gap: 30px; padding-inline: 0; }
+  .analytics-intro { display: block; }
+  .analytics-intro p { margin-top: 8px; }
+  .analysis-heading { display: block; }
+  .chart-toggle { margin-top: 14px; overflow-x: auto; }
+  .chart-toggle button { flex: 1 0 auto; }
+  .analysis-chart, .analysis-chart-wide, .change-chart { height: 300px; }
+  .composition-panel, .pressure-forecast-grid > div { padding-right: 0; }
+  .parker-share-chart { height: 350px; }
+  .forecast-select { margin-top: 14px; width: 180px; }
+  .analytics-sections { margin-top: 28px; }
 }

@@ -7,10 +7,40 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { EChart } from "./EChart.jsx";
+import { AnalyticsSections } from "./AnalyticsSections.jsx";
 
 const RED = "#e33b32";
 const TEAL = "#114f50";
 const SLATE = "#667386";
+
+function lineGradient(start, end) {
+  return {
+    type: "linear",
+    x: 0,
+    y: 0,
+    x2: 1,
+    y2: 0,
+    colorStops: [
+      { offset: 0, color: start },
+      { offset: 0.58, color: end },
+      { offset: 1, color: end },
+    ],
+  };
+}
+
+function areaGradient(color) {
+  return {
+    type: "linear",
+    x: 0,
+    y: 0,
+    x2: 0,
+    y2: 1,
+    colorStops: [
+      { offset: 0, color: `${color}16` },
+      { offset: 1, color: `${color}00` },
+    ],
+  };
+}
 
 const numberFormat = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 });
 const ratioFormat = new Intl.NumberFormat("cs-CZ", {
@@ -149,7 +179,7 @@ function ErrorState({ message }) {
   );
 }
 
-function lineChartOption(series, compact = false, reduceMotion = false) {
+function lineChartOption(series, compact = false, reduceMotion = false, metric = "permits-spaces") {
   const dates = series.map((row) => row.date);
   const axisText = { color: "#73736f", fontFamily: "Inter, sans-serif", fontSize: 11 };
   const common = {
@@ -234,14 +264,16 @@ function lineChartOption(series, compact = false, reduceMotion = false) {
         name: "Parkovací oprávnění",
         data: series.map((row) => row.permits),
         endLabel: { ...common.endLabel, show: !compact, color: RED },
-        lineStyle: { color: RED, width: 2.4 },
+        lineStyle: { color: lineGradient("#ed827b", RED), width: 2.4 },
+        areaStyle: { color: areaGradient(RED) },
       },
       {
         ...common,
         name: "Parkovací místa",
         data: series.map((row) => row.spaces),
         endLabel: { ...common.endLabel, show: !compact, color: TEAL },
-        lineStyle: { color: TEAL, width: 2.4 },
+        lineStyle: { color: lineGradient("#799b98", TEAL), width: 2.4 },
+        areaStyle: { color: areaGradient(TEAL) },
       },
       {
         ...common,
@@ -254,10 +286,17 @@ function lineChartOption(series, compact = false, reduceMotion = false) {
           color: SLATE,
           formatter: (params) => `${params.seriesName}\n${ratioFormat.format(params.value)}`,
         },
-        lineStyle: { color: SLATE, width: 1.8 },
+        lineStyle: { color: lineGradient("#aeb6c0", SLATE), width: 1.8 },
       },
     ],
   };
+  if (metric === "pressure") {
+    option.yAxis = [{ ...option.yAxis[1], position: "left" }];
+    option.series = [{ ...option.series[2], yAxisIndex: 0 }];
+    option.grid = compact
+      ? { left: 48, right: 14, top: 58, bottom: 42 }
+      : { left: 58, right: 122, top: 38, bottom: 42 };
+  }
   return option;
 }
 
@@ -315,14 +354,14 @@ function districtChartOption(districts, reduceMotion = false) {
   };
 }
 
-function ChartView({ payload }) {
+function ChartView({ payload, metric }) {
   const compactChart = useMediaQuery("(max-width: 760px)");
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   const visibleDistricts = useMemo(() => payload.districts.slice(0, 5), [payload.districts]);
   const lineOption = useMemo(
-    () => lineChartOption(payload.series, compactChart, reduceMotion),
-    [payload.series, compactChart, reduceMotion],
+    () => lineChartOption(payload.series, compactChart, reduceMotion, metric),
+    [payload.series, compactChart, reduceMotion, metric],
   );
   const districtOption = useMemo(
     () => districtChartOption(visibleDistricts, reduceMotion),
@@ -480,6 +519,7 @@ function InsightPanel({ payload, filters }) {
 
 export function App() {
   const [view, setView] = useState("charts");
+  const [metric, setMetric] = useState("permits-spaces");
   const [request, setRequest] = useState({ payload: null, error: "", loading: true });
   const { payload, error, loading } = request;
   const [filters, setFilters] = useState({
@@ -490,6 +530,13 @@ export function App() {
     zoneTypes: ["MIX", "OST", "RES", "VIS"],
   });
   const explorerQuery = useMemo(() => queryFor(filters), [filters]);
+  const effectiveFilters = payload
+    ? {
+        ...filters,
+        start: filters.start || payload.options.min_date,
+        end: filters.end || payload.options.max_date,
+      }
+    : filters;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -520,8 +567,6 @@ export function App() {
     const availableZoneTypes = new Set(payload.options.zone_types);
     setFilters((current) => ({
       ...current,
-      start: current.start || payload.options.min_date,
-      end: current.end || payload.options.max_date,
       castDne: current.castDne.filter((value) => availableTimes.has(value)),
       zoneTypes: current.zoneTypes.filter((value) => availableZoneTypes.has(value)),
     }));
@@ -548,7 +593,7 @@ export function App() {
           </div>
           <label className="metric-select">
             <span>Metrika</span>
-            <select defaultValue="permits-spaces">
+            <select value={metric} onChange={(event) => setMetric(event.target.value)}>
               <option value="permits-spaces">Oprávnění a parkovací místa</option>
               <option value="pressure">Oprávnění na místo</option>
             </select>
@@ -570,8 +615,8 @@ export function App() {
             {payload && (
               <section className="filter-bar" aria-label="Filtry průzkumníku">
                 <DateRange
-                  start={filters.start}
-                  end={filters.end}
+                  start={effectiveFilters.start}
+                  end={effectiveFilters.end}
                   onStart={(event) => setFilter("start", event.target.value)}
                   onEnd={(event) => setFilter("end", event.target.value)}
                 />
@@ -583,13 +628,14 @@ export function App() {
             <div className="primary-content">
             {loading && !payload ? <LoadingState /> : null}
             {error ? <ErrorState message={error} /> : null}
-            {payload && view === "charts" ? <ChartView payload={payload} /> : null}
+            {payload && view === "charts" ? <ChartView payload={payload} metric={metric} /> : null}
             {payload && view === "table" ? <TableView payload={payload} /> : null}
             {view === "map" ? <MapView /> : null}
             </div>
           </div>
-          {payload ? <InsightPanel payload={payload} filters={filters} /> : <aside className="insight-panel" />}
+          {payload ? <InsightPanel payload={payload} filters={effectiveFilters} /> : <aside className="insight-panel" />}
         </div>
+        {payload && view === "charts" ? <AnalyticsSections analytics={payload.analytics} /> : null}
       </main>
     </div>
   );

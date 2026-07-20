@@ -66,6 +66,12 @@ npm run dev
 
 The selected visual reference and implementation notes live in `docs/design/`.
 
+The Grafy view preserves all nine analytical questions from the original Streamlit
+overview in six editorial chart surfaces: the city trend and district ranking,
+zone and parker composition, detailed type trends, local annual change and its
+distribution, ZSJ parking pressure, and a 12-month district forecast. Every view
+uses the same period, time-of-day, district, and zone filters.
+
 Pro hledání podle adresy nastavte `MAPY_CZ_API_KEY`.
 
 Adresní záložka ve web app nyní umí:

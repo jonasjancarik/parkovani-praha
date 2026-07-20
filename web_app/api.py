@@ -13,6 +13,7 @@ if str(WEB_APP_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_APP_DIR))
 
 from data import load_parking_data  # noqa: E402
+from explorer_analytics import build_overview_analytics  # noqa: E402
 from explorer_data import build_explorer_payload, make_filters  # noqa: E402
 
 
@@ -38,4 +39,7 @@ def explorer(
     zone_type: list[str] | None = Query(default=None),
 ) -> dict:
     filters = make_filters(start, end, cast_dne, district, zone_type)
-    return build_explorer_payload(parking_data(), filters)
+    data = parking_data()
+    payload = build_explorer_payload(data, filters)
+    payload["analytics"] = build_overview_analytics(data, filters)
+    return payload
