@@ -147,6 +147,7 @@ h1, h2, p { margin-top: 0; }
   background: var(--paper);
 }
 .filter-bar {
+  min-width: 0;
   min-height: 98px;
   display: grid;
   grid-template-columns: minmax(220px, .95fr) minmax(260px, 1.12fr) minmax(170px, .7fr) minmax(230px, .95fr);
@@ -156,6 +157,7 @@ h1, h2, p { margin-top: 0; }
   border-bottom: 1px solid var(--rule);
 }
 .toolbar-search {
+  min-width: 0;
   display: flex;
   align-items: center;
   border-bottom: 1px solid var(--rule);
@@ -462,8 +464,10 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .app-shell { padding-inline: 24px; }
   .explorer-head { grid-template-columns: 1fr 270px; }
   .explainer { display: none; }
-  .sticky-toolbar { position: static; grid-template-columns: minmax(0, 1fr) 250px; }
-  .filter-bar { padding-right: 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sticky-toolbar { position: static; grid-template-columns: 1fr; }
+  .filter-bar { padding-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .toolbar-search { justify-content: flex-end; border-left: 0; padding: 15px 0; }
+  .toolbar-search .address-search { width: min(286px, 100%); }
   .workspace-grid { grid-template-columns: 1fr 250px; }
   .district-content { grid-template-columns: 1fr; height: auto; }
   .district-content table { display: none; }
@@ -482,7 +486,8 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .explorer-head h1 { font-size: 39px; }
   .sticky-toolbar { display: block; }
   .filter-bar { grid-template-columns: 1fr; padding-right: 0; }
-  .toolbar-search { border-left: 0; padding: 15px 0; }
+  .toolbar-search { justify-content: flex-start; }
+  .toolbar-search .address-search { width: 100%; }
   .workspace-grid { display: block; }
   .primary-content { padding-right: 0; }
   .insight-panel { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }

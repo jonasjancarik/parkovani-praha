@@ -7,6 +7,9 @@
 - Normalized capture: `docs/design/implementation-sticky-normalized.png` (local QA artifact, ignored by Git)
 - Combined comparison: `docs/design/comparison-sticky-final.png` (local QA artifact, ignored by Git)
 - Viewport and state: 1487 × 1058, Grafy active, all districts/time periods/zone types selected
+- Narrow-screen regression reference: `/var/folders/1j/t72zmxvn6cs1bmnxdqqgvkqw0000gn/T/codex-clipboard-149edc12-efdb-45f9-a308-0b4c587a0660.png` (user-provided focused crop; source viewport unknown)
+- Narrow-screen implementation: `docs/design/implementation-narrow-toolbar-final.png` at 800 × 800
+- Narrow-screen focused comparison: `docs/design/comparison-narrow-toolbar-final.png` (local QA artifact, ignored by Git)
 
 ## Fidelity review
 
@@ -26,6 +29,7 @@
 - Verified the shared district selector updates and resets the headline charts, insight summary, compositions, local changes, pressure series, and forecast data.
 - Verified 1024 × 900 with no filter overlap or horizontal overflow.
 - Verified 390 × 844 with a static single-column filter band, compact chart legends, hidden direct end labels, five district rows, stacked insight and analysis content, readable compositions and pressure charts, and no horizontal overflow. At 1,200px scroll the toolbar is out of view rather than consuming the phone viewport.
+- Verified the intermediate responsive range at 1024 × 900 and 800 × 800: filters form a two-by-two grid, the address search moves to its own row, and measured rectangles do not overlap. At the 760px boundary the filters switch to one column and the address search expands to the available width. All three checks report no horizontal overflow.
 - Semantic headings, tabs, labels, buttons, table structure, status/error regions, keyboard focus indicators, and reduced animation scope are present.
 
 ## Findings
@@ -37,5 +41,6 @@
 ## Comparison history
 
 - Sticky-toolbar pass: moving the address search into the filter band preserved the source composition at the comparison viewport. The combined full-view comparison and focused filter-band inspection found no new P0/P1/P2 drift; the new scrolled state keeps that same band intact at the top of the viewport.
+- Narrow-screen overlap pass: the user-provided crop exposed a P2 collision between the zone-type control and address search at intermediate widths. The toolbar now stacks the address search beneath a constrained two-column filter grid at widths up to 1100px. The focused before/after comparison plus 1024px, 800px, and 760px geometry checks show separated controls with no remaining P0/P1/P2 issue.
 
 final result: passed

@@ -14,4 +14,5 @@ chart blocks.
 
 On desktop, the shared filters and address search remain visible while the reader
 scrolls through the analysis. At tablet and phone widths the toolbar stays in the
-document flow so it does not crowd the available chart space.
+document flow, with the address search moving below the filters before the controls
+can collide or crowd the available chart space.
