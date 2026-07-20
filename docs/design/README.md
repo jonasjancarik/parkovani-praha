@@ -11,3 +11,7 @@ Streamlit overview into six flat editorial analysis sections. These sections kee
 the same visual tokens and shared filters while covering all nine original chart
 questions without reproducing the Streamlit page as a long sequence of unrelated
 chart blocks.
+
+On desktop, the shared filters and address search remain visible while the reader
+scrolls through the analysis. At tablet and phone widths the toolbar stays in the
+document flow so it does not crowd the available chart space.

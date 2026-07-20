@@ -462,6 +462,15 @@ function MapView() {
   );
 }
 
+function AddressSearch() {
+  return (
+    <label className="address-search">
+      <input placeholder="Najít adresu" />
+      <IconSearch size={18} stroke={1.6} aria-hidden="true" />
+    </label>
+  );
+}
+
 function InsightPanel({ payload, filters }) {
   const summary = payload.summary;
   const districtText = filters.districts.length
@@ -470,10 +479,6 @@ function InsightPanel({ payload, filters }) {
 
   return (
     <aside className="insight-panel">
-      <label className="address-search">
-        <input placeholder="Najít adresu" />
-        <IconSearch size={18} stroke={1.6} aria-hidden="true" />
-      </label>
       <section>
         <h2>Aktuální výběr</h2>
         <p>Praha · {districtText}</p>
@@ -610,21 +615,27 @@ export function App() {
           <button type="button" className={view === "table" ? "active" : ""} onClick={() => setView("table")} role="tab" aria-selected={view === "table"}>Tabulka</button>
         </div>
 
+        {payload && (
+          <div className="sticky-toolbar">
+            <section className="filter-bar" aria-label="Filtry průzkumníku">
+              <DateRange
+                start={effectiveFilters.start}
+                end={effectiveFilters.end}
+                onStart={(event) => setFilter("start", event.target.value)}
+                onEnd={(event) => setFilter("end", event.target.value)}
+              />
+              <MultiSelect label="Část dne" values={payload.options.cast_dne} selected={filters.castDne} onChange={(values) => setFilter("castDne", values)} />
+              <DistrictSelect values={payload.options.districts} selected={filters.districts} onChange={(values) => setFilter("districts", values)} />
+              <MultiSelect label="Typ zóny" values={payload.options.zone_types} selected={filters.zoneTypes} onChange={(values) => setFilter("zoneTypes", values)} />
+            </section>
+            <div className="toolbar-search">
+              <AddressSearch />
+            </div>
+          </div>
+        )}
+
         <div className="workspace-grid">
           <div className="workspace-main">
-            {payload && (
-              <section className="filter-bar" aria-label="Filtry průzkumníku">
-                <DateRange
-                  start={effectiveFilters.start}
-                  end={effectiveFilters.end}
-                  onStart={(event) => setFilter("start", event.target.value)}
-                  onEnd={(event) => setFilter("end", event.target.value)}
-                />
-                <MultiSelect label="Část dne" values={payload.options.cast_dne} selected={filters.castDne} onChange={(values) => setFilter("castDne", values)} />
-                <DistrictSelect values={payload.options.districts} selected={filters.districts} onChange={(values) => setFilter("districts", values)} />
-                <MultiSelect label="Typ zóny" values={payload.options.zone_types} selected={filters.zoneTypes} onChange={(values) => setFilter("zoneTypes", values)} />
-              </section>
-            )}
             <div className="primary-content">
             {loading && !payload ? <LoadingState /> : null}
             {error ? <ErrorState message={error} /> : null}
