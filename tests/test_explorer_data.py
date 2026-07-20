@@ -80,3 +80,16 @@ def test_explorer_applies_district_filter() -> None:
     assert payload["summary"]["permits"] == 130
     assert payload["summary"]["permits_per_space"] == pytest.approx(1.3)
     assert payload["districts"][0]["district"] == "P01"
+
+
+def test_explorer_change_uses_first_nonzero_permit_month() -> None:
+    frame = sample_data()
+    frame.loc[frame["date"] == "2025-01-31", "POP_CELKEM"] = 0
+
+    payload = build_explorer_payload(
+        frame,
+        ExplorerFilters(zone_types=("RES", "MIX")),
+    )
+
+    assert payload["summary"]["permits_change"] == 0
+    assert payload["summary"]["ratio_change"] == 0

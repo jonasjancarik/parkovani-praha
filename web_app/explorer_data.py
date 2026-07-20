@@ -73,7 +73,7 @@ def _safe_change(current: float, initial: float) -> float | None:
 def build_explorer_payload(
     df: pd.DataFrame,
     filters: ExplorerFilters,
-    district_limit: int = 8,
+    district_limit: int = 5,
 ) -> dict:
     scoped = _filter_rows(df, filters)
     options = explorer_options(df)
@@ -116,6 +116,8 @@ def build_explorer_payload(
     )
 
     first = series.iloc[0]
+    first_permits = series.loc[series["POP_CELKEM"] > 0].iloc[0]
+    first_ratio = series.loc[series["opravneni_na_misto"] > 0].iloc[0]
     current = series.iloc[-1]
     current_permits = float(current["POP_CELKEM"])
     current_spaces = float(current["parkovacich_mist_v_zps"])
@@ -148,13 +150,13 @@ def build_explorer_payload(
             "spaces": round(current_spaces),
             "permits_per_space": round(current_ratio, 3),
             "permits_change": _safe_change(
-                current_permits, float(first["POP_CELKEM"])
+                current_permits, float(first_permits["POP_CELKEM"])
             ),
             "spaces_change": _safe_change(
                 current_spaces, float(first["parkovacich_mist_v_zps"])
             ),
             "ratio_change": _safe_change(
-                current_ratio, float(first["opravneni_na_misto"])
+                current_ratio, float(first_ratio["opravneni_na_misto"])
             ),
         },
     }

@@ -17,6 +17,7 @@ const ratioFormat = new Intl.NumberFormat("cs-CZ", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const dateFormat = new Intl.DateTimeFormat("cs-CZ");
 
 function pct(value) {
   if (value == null) return "—";
@@ -26,7 +27,20 @@ function pct(value) {
 
 function isoToCzech(value) {
   if (!value) return "—";
-  return new Intl.DateTimeFormat("cs-CZ").format(new Date(`${value}T12:00:00`));
+  return dateFormat.format(new Date(`${value}T12:00:00`));
+}
+
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, [query]);
+
+  return matches;
 }
 
 function queryFor(filters) {
@@ -40,9 +54,10 @@ function queryFor(filters) {
 }
 
 function MultiSelect({ label, values, selected, onChange, display }) {
+  const selectedValues = useMemo(() => new Set(selected), [selected]);
   const toggle = (value) => {
     onChange(
-      selected.includes(value)
+      selectedValues.has(value)
         ? selected.filter((item) => item !== value)
         : [...selected, value],
     );
@@ -72,7 +87,7 @@ function MultiSelect({ label, values, selected, onChange, display }) {
             <label key={value}>
               <input
                 type="checkbox"
-                checked={selected.includes(value)}
+                checked={selectedValues.has(value)}
                 onChange={() => toggle(value)}
               />
               <span>{display?.(value) ?? value}</span>
@@ -81,6 +96,25 @@ function MultiSelect({ label, values, selected, onChange, display }) {
         </div>
       </details>
     </div>
+  );
+}
+
+function DistrictSelect({ values, selected, onChange }) {
+  return (
+    <label className="filter-control district-select">
+      <span className="filter-label">Městská část</span>
+      <select
+        value={selected[0] ?? ""}
+        onChange={(event) => onChange(event.target.value ? [event.target.value] : [])}
+      >
+        <option value="">Všechny městské části</option>
+        {values.map((value) => (
+          <option key={value} value={value}>
+            {value.replace(/^P0?/, "Praha ")}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -115,7 +149,7 @@ function ErrorState({ message }) {
   );
 }
 
-function lineChartOption(series) {
+function lineChartOption(series, compact = false, reduceMotion = false) {
   const dates = series.map((row) => row.date);
   const axisText = { color: "#73736f", fontFamily: "Inter, sans-serif", fontSize: 11 };
   const common = {
@@ -134,10 +168,27 @@ function lineChartOption(series) {
     labelLayout: { moveOverlap: "shiftY" },
   };
 
-  return {
-    animationDuration: 650,
+  const option = {
+    animationDuration: reduceMotion ? 0 : 650,
     color: [RED, TEAL, SLATE],
-    grid: { left: 58, right: 122, top: 38, bottom: 42 },
+    grid: compact
+      ? { left: 48, right: 14, top: 58, bottom: 42 }
+      : { left: 58, right: 122, top: 38, bottom: 42 },
+    legend: compact
+      ? {
+          show: true,
+          top: 12,
+          left: 0,
+          itemWidth: 18,
+          itemHeight: 2,
+          formatter: (name) => ({
+            "Parkovací oprávnění": "Oprávnění",
+            "Parkovací místa": "Místa",
+            "Oprávnění na místo": "Oprávnění / místo",
+          })[name] ?? name,
+          textStyle: { color: "#4f4c45", fontFamily: "Inter, sans-serif", fontSize: 9 },
+        }
+      : { show: false },
     tooltip: {
       trigger: "axis",
       backgroundColor: "#fffdf8",
@@ -151,7 +202,11 @@ function lineChartOption(series) {
       data: dates,
       axisLine: { lineStyle: { color: "#aaa59a" } },
       axisTick: { show: false },
-      axisLabel: { ...axisText, formatter: (value) => value.slice(0, 4), interval: 11 },
+      axisLabel: {
+        ...axisText,
+        formatter: (value) => value.slice(0, 4),
+        interval: compact ? 23 : 11,
+      },
     },
     yAxis: [
       {
@@ -178,14 +233,14 @@ function lineChartOption(series) {
         ...common,
         name: "Parkovací oprávnění",
         data: series.map((row) => row.permits),
-        endLabel: { ...common.endLabel, color: RED },
+        endLabel: { ...common.endLabel, show: !compact, color: RED },
         lineStyle: { color: RED, width: 2.4 },
       },
       {
         ...common,
         name: "Parkovací místa",
         data: series.map((row) => row.spaces),
-        endLabel: { ...common.endLabel, color: TEAL },
+        endLabel: { ...common.endLabel, show: !compact, color: TEAL },
         lineStyle: { color: TEAL, width: 2.4 },
       },
       {
@@ -195,6 +250,7 @@ function lineChartOption(series) {
         data: series.map((row) => row.permits_per_space),
         endLabel: {
           ...common.endLabel,
+          show: !compact,
           color: SLATE,
           formatter: (params) => `${params.seriesName}\n${ratioFormat.format(params.value)}`,
         },
@@ -202,12 +258,13 @@ function lineChartOption(series) {
       },
     ],
   };
+  return option;
 }
 
-function districtChartOption(districts) {
+function districtChartOption(districts, reduceMotion = false) {
   const values = districts.map((row) => row.permits_per_space);
   return {
-    animationDuration: 500,
+    animationDuration: reduceMotion ? 0 : 500,
     grid: { left: 76, right: 38, top: 24, bottom: 14 },
     xAxis: {
       type: "value",
@@ -259,10 +316,17 @@ function districtChartOption(districts) {
 }
 
 function ChartView({ payload }) {
-  const lineOption = useMemo(() => lineChartOption(payload.series), [payload.series]);
+  const compactChart = useMediaQuery("(max-width: 760px)");
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+
+  const visibleDistricts = useMemo(() => payload.districts.slice(0, 5), [payload.districts]);
+  const lineOption = useMemo(
+    () => lineChartOption(payload.series, compactChart, reduceMotion),
+    [payload.series, compactChart, reduceMotion],
+  );
   const districtOption = useMemo(
-    () => districtChartOption(payload.districts),
-    [payload.districts],
+    () => districtChartOption(visibleDistricts, reduceMotion),
+    [visibleDistricts, reduceMotion],
   );
 
   return (
@@ -289,7 +353,7 @@ function ChartView({ payload }) {
               </tr>
             </thead>
             <tbody>
-              {payload.districts.map((row) => (
+              {visibleDistricts.map((row) => (
                 <tr key={row.district}>
                   <td>{numberFormat.format(row.permits)}</td>
                   <td>{numberFormat.format(row.spaces)}</td>
@@ -299,6 +363,9 @@ function ChartView({ payload }) {
             </tbody>
           </table>
         </div>
+        <p className="data-note">
+          Pozn.: Zahrnuje aktivní oprávnění a veřejná i neveřejná parkovací místa v regulovaných zónách.
+        </p>
       </section>
     </>
   );
@@ -413,9 +480,8 @@ function InsightPanel({ payload, filters }) {
 
 export function App() {
   const [view, setView] = useState("charts");
-  const [payload, setPayload] = useState(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [request, setRequest] = useState({ payload: null, error: "", loading: true });
+  const { payload, error, loading } = request;
   const [filters, setFilters] = useState({
     start: "",
     end: "",
@@ -423,36 +489,43 @@ export function App() {
     districts: [],
     zoneTypes: ["MIX", "OST", "RES", "VIS"],
   });
+  const explorerQuery = useMemo(() => queryFor(filters), [filters]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    fetch(`/api/explorer?${queryFor(filters)}`, { signal: controller.signal })
+    setRequest((current) => ({ ...current, loading: true }));
+    fetch(`/api/explorer?${explorerQuery}`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
       })
       .then((nextPayload) => {
-        setPayload(nextPayload);
-        setError("");
-        setFilters((current) => ({
-          ...current,
-          start: current.start || nextPayload.options.min_date,
-          end: current.end || nextPayload.options.max_date,
-          castDne: current.castDne.filter((value) =>
-            nextPayload.options.cast_dne.includes(value),
-          ),
-          zoneTypes: current.zoneTypes.filter((value) =>
-            nextPayload.options.zone_types.includes(value),
-          ),
-        }));
+        setRequest({ payload: nextPayload, error: "", loading: false });
       })
       .catch((reason) => {
-        if (reason.name !== "AbortError") setError(reason.message);
-      })
-      .finally(() => setLoading(false));
+        if (reason.name !== "AbortError") {
+          setRequest((current) => ({
+            ...current,
+            error: reason.message,
+            loading: false,
+          }));
+        }
+      });
     return () => controller.abort();
-  }, [filters.start, filters.end, filters.castDne.join("|"), filters.districts.join("|"), filters.zoneTypes.join("|")]);
+  }, [explorerQuery]);
+
+  useEffect(() => {
+    if (!payload) return;
+    const availableTimes = new Set(payload.options.cast_dne);
+    const availableZoneTypes = new Set(payload.options.zone_types);
+    setFilters((current) => ({
+      ...current,
+      start: current.start || payload.options.min_date,
+      end: current.end || payload.options.max_date,
+      castDne: current.castDne.filter((value) => availableTimes.has(value)),
+      zoneTypes: current.zoneTypes.filter((value) => availableZoneTypes.has(value)),
+    }));
+  }, [payload]);
 
   const setFilter = (name, value) => setFilters((current) => ({ ...current, [name]: value }));
 
@@ -487,32 +560,33 @@ export function App() {
         </section>
 
         <div className="view-tabs" role="tablist" aria-label="Zobrazení dat">
-          <button className={view === "charts" ? "active" : ""} onClick={() => setView("charts")} role="tab" aria-selected={view === "charts"}>Grafy</button>
-          <button className={view === "map" ? "active" : ""} onClick={() => setView("map")} role="tab" aria-selected={view === "map"}>Mapa</button>
-          <button className={view === "table" ? "active" : ""} onClick={() => setView("table")} role="tab" aria-selected={view === "table"}>Tabulka</button>
+          <button type="button" className={view === "charts" ? "active" : ""} onClick={() => setView("charts")} role="tab" aria-selected={view === "charts"}>Grafy</button>
+          <button type="button" className={view === "map" ? "active" : ""} onClick={() => setView("map")} role="tab" aria-selected={view === "map"}>Mapa</button>
+          <button type="button" className={view === "table" ? "active" : ""} onClick={() => setView("table")} role="tab" aria-selected={view === "table"}>Tabulka</button>
         </div>
 
-        {payload && (
-          <section className="filter-bar" aria-label="Filtry průzkumníku">
-            <DateRange
-              start={filters.start}
-              end={filters.end}
-              onStart={(event) => setFilter("start", event.target.value)}
-              onEnd={(event) => setFilter("end", event.target.value)}
-            />
-            <MultiSelect label="Část dne" values={payload.options.cast_dne} selected={filters.castDne} onChange={(values) => setFilter("castDne", values)} />
-            <MultiSelect label="Městská část" values={payload.options.districts} selected={filters.districts} onChange={(values) => setFilter("districts", values)} display={(value) => value.replace(/^P0?/, "Praha ")} />
-            <MultiSelect label="Typ zóny" values={payload.options.zone_types} selected={filters.zoneTypes} onChange={(values) => setFilter("zoneTypes", values)} />
-          </section>
-        )}
-
-        <div className="content-grid">
-          <div className="primary-content">
+        <div className="workspace-grid">
+          <div className="workspace-main">
+            {payload && (
+              <section className="filter-bar" aria-label="Filtry průzkumníku">
+                <DateRange
+                  start={filters.start}
+                  end={filters.end}
+                  onStart={(event) => setFilter("start", event.target.value)}
+                  onEnd={(event) => setFilter("end", event.target.value)}
+                />
+                <MultiSelect label="Část dne" values={payload.options.cast_dne} selected={filters.castDne} onChange={(values) => setFilter("castDne", values)} />
+                <DistrictSelect values={payload.options.districts} selected={filters.districts} onChange={(values) => setFilter("districts", values)} />
+                <MultiSelect label="Typ zóny" values={payload.options.zone_types} selected={filters.zoneTypes} onChange={(values) => setFilter("zoneTypes", values)} />
+              </section>
+            )}
+            <div className="primary-content">
             {loading && !payload ? <LoadingState /> : null}
             {error ? <ErrorState message={error} /> : null}
             {payload && view === "charts" ? <ChartView payload={payload} /> : null}
             {payload && view === "table" ? <TableView payload={payload} /> : null}
             {view === "map" ? <MapView /> : null}
+            </div>
           </div>
           {payload ? <InsightPanel payload={payload} filters={filters} /> : <aside className="insight-panel" />}
         </div>

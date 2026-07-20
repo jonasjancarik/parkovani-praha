@@ -22,9 +22,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 88% 3%, rgba(255, 255, 255, 0.72), transparent 33%),
-    var(--paper);
+  background: var(--paper);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -143,10 +141,10 @@ h1, h2, p { margin-top: 0; }
 .filter-bar {
   min-height: 98px;
   display: grid;
-  grid-template-columns: minmax(270px, 1fr) minmax(295px, 1.12fr) minmax(190px, .72fr) minmax(270px, 1fr);
+  grid-template-columns: minmax(220px, .95fr) minmax(260px, 1.12fr) minmax(170px, .7fr) minmax(230px, .95fr);
   align-items: center;
   gap: 26px;
-  padding: 15px 22.2% 15px 0;
+  padding: 15px 20px 15px 0;
   border-bottom: 1px solid var(--rule);
 }
 .filter-control { min-width: 0; display: grid; gap: 6px; }
@@ -155,6 +153,16 @@ h1, h2, p { margin-top: 0; }
   border: 1px solid #c8c2b7;
   border-radius: 6px;
   background: rgba(255,255,255,.38);
+}
+.district-select select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #c8c2b7;
+  border-radius: 6px;
+  padding: 0 32px 0 11px;
+  background: rgba(255,255,255,.38);
+  color: #66625b;
+  font-size: 11px;
 }
 .date-fields {
   display: grid;
@@ -214,27 +222,29 @@ h1, h2, p { margin-top: 0; }
 }
 .select-menu label { display: flex; align-items: center; gap: 8px; padding: 7px; font-size: 12px; }
 
-.content-grid {
+.workspace-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 286px;
   min-height: 660px;
 }
-.primary-content { min-width: 0; padding-right: 28px; }
-.insight-panel { border-left: 1px solid var(--rule); padding: 28px 0 0 18px; }
+.workspace-main { min-width: 0; }
+.primary-content { min-width: 0; padding-right: 20px; }
+.insight-panel { border-left: 1px solid var(--rule); padding: 19px 0 0 18px; }
 
-.chart-section { height: 410px; padding-top: 23px; border-bottom: 1px solid var(--rule); }
+.chart-section { height: 420px; padding-top: 23px; border-bottom: 1px solid var(--rule); }
 .chart-section h2, .district-section h2, .data-table-view h2,
 .insight-panel h2, .map-empty-state h2 {
   font: 400 20px/1.15 "Newsreader", Georgia, serif;
   margin-bottom: 0;
 }
 .chart-section h2 { display: flex; align-items: center; gap: 8px; }
-.time-chart { height: 360px; width: 100%; }
+.time-chart { height: 370px; width: 100%; }
 
 .district-section { min-height: 245px; padding-top: 15px; }
 .section-heading p { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
 .district-content { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 24px; height: 190px; }
 .district-chart { width: 100%; height: 185px; }
+.data-note { margin: -4px 0 0; color: #858077; font-size: 9px; }
 table { width: 100%; border-collapse: collapse; }
 .district-content table { margin-top: 11px; font-size: 10px; }
 th { font-weight: 500; color: #393832; }
@@ -254,7 +264,7 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
 .address-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 12px; }
 .address-search input::placeholder { color: #a6a097; }
 .insight-panel > section { border-top: 1px solid var(--rule); padding: 23px 0 18px; }
-.insight-panel > section:first-of-type { padding-top: 9px; border-top: 0; }
+.insight-panel > section:first-of-type { padding: 9px 0 25px; border-top: 0; }
 .insight-panel section > p { margin: 8px 0 0; font-size: 11px; line-height: 1.35; }
 .selection-date { padding-top: 13px; }
 .insight-metric > span { font: 400 16px/1.15 "Newsreader", Georgia, serif; }
@@ -277,6 +287,9 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
 }
 .loading-state span { width: 14px; height: 14px; border: 2px solid #ccc5ba; border-top-color: var(--red); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .loading-state span { animation: none; }
+}
 .error-state { color: #9c2b24; }
 
 .data-table-view { padding: 24px 0; }
@@ -304,7 +317,7 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .explorer-head { grid-template-columns: 1fr 270px; }
   .explainer { display: none; }
   .filter-bar { padding-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .content-grid { grid-template-columns: 1fr 250px; }
+  .workspace-grid { grid-template-columns: 1fr 250px; }
   .district-content { grid-template-columns: 1fr; height: auto; }
   .district-content table { display: none; }
 }
@@ -317,7 +330,7 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .explorer-head { grid-template-columns: 1fr; gap: 18px; }
   .explorer-head h1 { font-size: 39px; }
   .filter-bar { grid-template-columns: 1fr; }
-  .content-grid { display: block; }
+  .workspace-grid { display: block; }
   .primary-content { padding-right: 0; }
   .insight-panel { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }
   .chart-section { height: 380px; }
