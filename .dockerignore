@@ -1,0 +1,13 @@
+.git
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+frontend/node_modules
+frontend/dist
+docs
+tests
+data/*
+!data/processed/
+data/processed/*
+!data/processed/data_parking_and_permits.csv

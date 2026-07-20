@@ -72,6 +72,22 @@ zone and parker composition, detailed type trends, local annual change and its
 distribution, ZSJ parking pressure, and a 12-month district forecast. Every view
 uses the same period, time-of-day, district, and zone filters.
 
+### Production container
+
+The production image builds the React frontend and serves it together with the
+FastAPI endpoints from one process:
+
+```bash
+docker compose up -d --build
+```
+
+Compose publishes the service on `127.0.0.1:3014`, keeping the origin private for
+the Cloudflare Tunnel route. Verify it with:
+
+```bash
+curl http://127.0.0.1:3014/api/health
+```
+
 Pro hledání podle adresy nastavte `MAPY_CZ_API_KEY`.
 
 Adresní záložka ve web app nyní umí:

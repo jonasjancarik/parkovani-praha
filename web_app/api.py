@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, Query
+from fastapi.staticfiles import StaticFiles
 
 WEB_APP_DIR = Path(__file__).resolve().parent
 if str(WEB_APP_DIR) not in sys.path:
@@ -43,3 +44,8 @@ def explorer(
     payload = build_explorer_payload(data, filters)
     payload["analytics"] = build_overview_analytics(data, filters)
     return payload
+
+
+FRONTEND_DIST = WEB_APP_DIR.parent / "frontend" / "dist"
+if FRONTEND_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")

@@ -1,0 +1,7 @@
+services:
+  web:
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3014:8000"
