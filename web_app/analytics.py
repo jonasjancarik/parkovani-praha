@@ -18,6 +18,63 @@ def lod_include_avg(
     return grouped.groupby(group_dims)[cols].sum().reset_index()
 
 
+def add_annual_total_line(
+    fig: go.Figure,
+    series: pd.DataFrame,
+    value_cols: str | Iterable[str],
+    label: str = "Celkem",
+) -> go.Figure:
+    """Add a total line with one readable value label per year."""
+    cols = [value_cols] if isinstance(value_cols, str) else list(value_cols)
+    totals = (
+        series.groupby("date", as_index=False)[cols]
+        .sum()
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
+    if totals.empty:
+        return fig
+
+    totals["total"] = totals[cols].sum(axis=1)
+    totals["label"] = ""
+    annual_first_rows = totals.groupby(totals["date"].dt.year).head(1).index
+    latest_year = totals.iloc[-1]["date"].year
+    annual_first_rows = annual_first_rows[
+        totals.loc[annual_first_rows, "date"].dt.year != latest_year
+    ]
+    annual_first_rows = annual_first_rows[
+        totals.loc[annual_first_rows, "total"] != 0
+    ]
+    totals.loc[annual_first_rows, "label"] = totals.loc[
+        annual_first_rows, "total"
+    ].map(lambda value: f"{value:,.0f}".replace(",", " "))
+    totals.loc[totals.index[-1], "label"] = f"{totals.iloc[-1]['total']:,.0f}".replace(
+        ",", " "
+    )
+    totals["hover_label"] = totals["total"].map(
+        lambda value: f"{value:,.0f}".replace(",", " ")
+    )
+    totals["marker_size"] = totals["label"].map(lambda value: 6 if value else 0)
+
+    fig.add_trace(
+        go.Scatter(
+            x=totals["date"],
+            y=totals["total"],
+            mode="lines+markers+text",
+            name=label,
+            line=dict(width=3, color="#5D3A9B"),
+            marker=dict(size=totals["marker_size"], color="#5D3A9B"),
+            text=totals["label"],
+            textposition="top center",
+            textfont=dict(size=12),
+            cliponaxis=False,
+            customdata=totals["hover_label"],
+            hovertemplate="%{x|%d.%m.%Y}<br>Celkem: %{customdata}<extra></extra>",
+        )
+    )
+    return fig
+
+
 def zsj_annual_change(
     df: pd.DataFrame,
     date_range: Tuple[pd.Timestamp, pd.Timestamp],

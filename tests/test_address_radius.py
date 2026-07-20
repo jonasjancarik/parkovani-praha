@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 from shapely.geometry import Point, box
 
 WEB_APP_DIR = Path(__file__).resolve().parents[1] / "web_app"
@@ -13,6 +14,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from data import radius_latest_snapshot, radius_spaces_series, zone_capacity_history
+from analytics import add_annual_total_line
 from geo import Zone, ZoneIndex, project_geometry
 from src.parking_cleanup import apply_temporary_capacity_regime_cleanup
 from address_exports import build_zone_hits_geojson
@@ -28,6 +30,43 @@ from address_logic import (
 
 
 class AddressRadiusTests(unittest.TestCase):
+    def test_total_line_uses_daily_totals_and_annual_value_labels(self):
+        series = pd.DataFrame(
+            [
+                {"date": "2024-01-31", "typ_zony": "MIX", "spaces": 20},
+                {"date": "2024-01-31", "typ_zony": "RES", "spaces": 80},
+                {"date": "2024-06-30", "typ_zony": "MIX", "spaces": 25},
+                {"date": "2024-06-30", "typ_zony": "RES", "spaces": 80},
+                {"date": "2025-01-31", "typ_zony": "MIX", "spaces": 30},
+                {"date": "2025-01-31", "typ_zony": "RES", "spaces": 80},
+            ]
+        )
+        series["date"] = pd.to_datetime(series["date"])
+
+        figure = add_annual_total_line(go.Figure(), series, "spaces")
+
+        total_trace = figure.data[0]
+        self.assertEqual(list(total_trace.y), [100, 105, 110])
+        self.assertEqual(list(total_trace.text), ["100", "", "110"])
+        self.assertEqual(total_trace.name, "Celkem")
+
+        components = pd.DataFrame(
+            [
+                {"date": "2024-01-31", "res": 80, "mix": 20},
+                {"date": "2024-06-30", "res": 80, "mix": 25},
+                {"date": "2025-01-31", "res": 80, "mix": 30},
+                {"date": "2025-06-30", "res": 80, "mix": 35},
+            ]
+        )
+        components["date"] = pd.to_datetime(components["date"])
+
+        component_figure = add_annual_total_line(
+            go.Figure(), components, ["res", "mix"]
+        )
+
+        self.assertEqual(list(component_figure.data[0].y), [100, 105, 110, 115])
+        self.assertEqual(list(component_figure.data[0].text), ["100", "", "", "115"])
+
     def test_zone_index_supports_shapely2_indices_and_radius_lookup(self):
         zone_a_geom = box(14.4200, 50.0800, 14.4210, 50.0810)
         zone_b_geom = box(14.4230, 50.0800, 14.4240, 50.0810)

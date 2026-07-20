@@ -35,7 +35,7 @@ from address_logic import (
     format_signed_int,
     safe_total,
 )
-from analytics import style_figure
+from analytics import add_annual_total_line, style_figure
 from constants import POP_MEASURES
 from data import radius_latest_snapshot, radius_spaces_series, zone_capacity_history
 from geo import (
@@ -694,7 +694,7 @@ def render_address_view(
     zsj_mapping,
     cast_dne_values,
 ):
-    st.subheader("Address insight")
+    st.subheader("Okolí adresy")
     api_key = os.getenv("MAPY_CZ_API_KEY")
     if not api_key:
         st.warning("MAPY_CZ_API_KEY chybí v prostředí.")
@@ -904,7 +904,10 @@ def render_address_view(
         x="date",
         y=zone_type_cols,
     )
-    st.plotly_chart(style_figure(fig_zone_types), use_container_width=True)
+    add_annual_total_line(fig_zone_types, zone_types, zone_type_cols, label="Celkem")
+    fig_zone_types = style_figure(fig_zone_types)
+    fig_zone_types.update_layout(margin=dict(l=20, r=20, t=60, b=20))
+    st.plotly_chart(fig_zone_types, use_container_width=True)
 
     pop_cols = list(POP_MEASURES.values())
     zone_pop = zone_data.groupby("date")[pop_cols].mean().reset_index()
@@ -913,4 +916,7 @@ def render_address_view(
         x="date",
         y=pop_cols,
     )
-    st.plotly_chart(style_figure(fig_zone_pop), use_container_width=True)
+    add_annual_total_line(fig_zone_pop, zone_pop, pop_cols, label="Celkem")
+    fig_zone_pop = style_figure(fig_zone_pop)
+    fig_zone_pop.update_layout(margin=dict(l=20, r=20, t=60, b=20))
+    st.plotly_chart(fig_zone_pop, use_container_width=True)

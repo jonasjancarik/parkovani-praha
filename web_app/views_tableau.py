@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from analytics import (
+    add_annual_total_line,
     build_area_forecast_figure,
     lod_include_avg,
     parker_default_labels,
@@ -99,7 +100,15 @@ def render_tableau_view(
             y="parkovacich_mist_v_zps",
             color="typ_zony",
         )
-        st.plotly_chart(style_figure(fig_mist), use_container_width=True)
+        add_annual_total_line(
+            fig_mist,
+            mist_series,
+            "parkovacich_mist_v_zps",
+            label="Celkem",
+        )
+        fig_mist = style_figure(fig_mist)
+        fig_mist.update_layout(margin=dict(l=20, r=20, t=60, b=20))
+        st.plotly_chart(fig_mist, use_container_width=True)
 
     st.subheader("Vývoj počtu parkovacích oprávnění")
     if filtered.empty:
@@ -115,7 +124,6 @@ def render_tableau_view(
             st.stop()
         pop_cols = [POP_MEASURES[label] for label in pop_selected]
         pop_series = lod_include_avg(filtered, ["date"], pop_cols)
-        pop_series["pop_main"] = pop_series[pop_cols].sum(axis=1)
         fig_pop = go.Figure()
         for col in pop_cols:
             label = [k for k, v in POP_MEASURES.items() if v == col][0]
@@ -128,16 +136,15 @@ def render_tableau_view(
                     name=label,
                 )
             )
-        fig_pop.add_trace(
-            go.Scatter(
-                x=pop_series["date"],
-                y=pop_series["pop_main"],
-                mode="lines",
-                name="POP Celkem (vybrané typy)",
-                line=dict(width=3, color="#1f1c17"),
-            )
+        add_annual_total_line(
+            fig_pop,
+            pop_series,
+            pop_cols,
+            label="Celkem (vybrané typy)",
         )
-        st.plotly_chart(style_figure(fig_pop), use_container_width=True)
+        fig_pop = style_figure(fig_pop)
+        fig_pop.update_layout(margin=dict(l=20, r=20, t=60, b=20))
+        st.plotly_chart(fig_pop, use_container_width=True)
 
     st.subheader("Abs. počet parkujících")
     nav_detail_abs = st.radio(
@@ -164,7 +171,10 @@ def render_tableau_view(
             x="date",
             y=abs_cols,
         )
-        st.plotly_chart(style_figure(fig_abs), use_container_width=True)
+        add_annual_total_line(fig_abs, abs_series, abs_cols, label="Celkem")
+        fig_abs = style_figure(fig_abs)
+        fig_abs.update_layout(margin=dict(l=20, r=20, t=60, b=20))
+        st.plotly_chart(fig_abs, use_container_width=True)
 
     st.subheader("ZSJ: průměrná roční změna počtu registrovaných vozidel")
     with st.expander("Stabilizace startu podle parkovacích míst", expanded=False):

@@ -116,7 +116,7 @@ st.set_page_config(page_title="Parkování Praha", layout="wide")
 inject_styles()
 
 st.title("Parkování Praha")
-st.caption("Replika Tableau + adresa → report.")
+st.caption("Vývoj parkování a podrobný přehled okolí vybrané adresy.")
 
 data = get_data()
 zone_index = get_zone_index()
@@ -172,7 +172,7 @@ filtered = apply_filters(
     typ_zony_filter,
 )
 
-tab_tableau, tab_address = st.tabs(["Tableau views", "Address insight"])
+tab_tableau, tab_address = st.tabs(["Přehledy", "Okolí adresy"])
 
 with tab_tableau:
     render_tableau_view(
