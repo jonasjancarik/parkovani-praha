@@ -71,6 +71,28 @@ def test_explorer_deduplicates_time_of_day_rows() -> None:
     assert [row["district"] for row in payload["districts"]] == ["P01", "P02"]
 
 
+def test_invariant_totals_ignore_uneven_time_of_day_coverage() -> None:
+    frame = sample_data()
+    frame = frame[
+        ~(
+            (frame["kod_useku"] == "P2-A")
+            & (frame["cast_dne"] == "noc")
+        )
+    ]
+
+    payload = build_explorer_payload(
+        frame,
+        ExplorerFilters(cast_dne=("noc",), zone_types=("RES", "MIX")),
+    )
+
+    assert payload["series"][-1] == {
+        "date": "2025-02-28",
+        "permits": 220,
+        "spaces": 200,
+        "permits_per_space": 1.1,
+    }
+
+
 def test_explorer_applies_district_filter() -> None:
     payload = build_explorer_payload(
         sample_data(),
@@ -93,3 +115,28 @@ def test_explorer_change_uses_first_nonzero_permit_month() -> None:
 
     assert payload["summary"]["permits_change"] == 0
     assert payload["summary"]["ratio_change"] == 0
+
+
+def test_capacity_only_period_returns_partial_payload() -> None:
+    frame = sample_data()
+    frame["POP_CELKEM"] = None
+
+    payload = build_explorer_payload(
+        frame,
+        ExplorerFilters(zone_types=("RES", "MIX")),
+    )
+
+    assert payload["series"][-1] == {
+        "date": "2025-02-28",
+        "permits": None,
+        "spaces": 200,
+        "permits_per_space": None,
+    }
+    assert payload["summary"]["permits"] is None
+    assert payload["summary"]["permits_change"] is None
+    assert payload["summary"]["ratio_change"] is None
+    assert payload["coverage"] == {
+        "permits_available": False,
+        "permits_start": None,
+        "permits_end": None,
+    }

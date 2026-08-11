@@ -70,7 +70,15 @@ The Grafy view preserves all nine analytical questions from the original Streaml
 overview in six editorial chart surfaces: the city trend and district ranking,
 zone and parker composition, detailed type trends, local annual change and its
 distribution, ZSJ parking pressure, and a 12-month district forecast. Every view
-uses the same period, time-of-day, district, and zone filters.
+uses the same period, district, and zone filters. The time-of-day filter applies
+to observations that genuinely change during the day, such as parker composition.
+
+Permit counts, parking capacity, and the resulting permits-per-space pressure are
+invariant across parts of the day. The explorer therefore calculates those measures
+from one canonical row per zone and month, independently of the `Část dne` filter.
+That filter applies only to parker composition and other measurements that genuinely
+change during the day; this prevents changes in historical source coverage from
+appearing as changes in parking capacity.
 
 ### Production container
 
@@ -267,6 +275,26 @@ Pro spuštění těchto skriptů (a ostatních Python skriptů v projektu) s `uv
 uv run python src/mapping.py map_zones_to_areas # Příklad pro useky_na_zsj
 uv run python src/mapping.py map_buildings_to_zones # Příklad pro domy_na_useky
 ```
+
+Statické mapování domů na úseky je historický podklad a nesmí se naslepo
+regenerovat do produkčních dat. Pro porovnání jednoho měsíce vytvořte kandidáta
+a auditní report pouze v `/tmp`; příkaz ověří úplnost, aktivní cílové úseky,
+součty všech typů oprávnění, náhradní souřadnice, remízy i vzdálenosti:
+
+```bash
+uv run python -m src.permit_zone_mapping audit \
+  --month 202606 \
+  --candidate-output /tmp/parkovani-permits-202606-candidate.csv \
+  --report-output /tmp/parkovani-permit-zone-202606-report.json \
+  --dry-run --strict
+```
+
+Kandidátní data nepropagujte, dokud nejsou zkontrolované scénáře vzdáleností a
+změny proti stávajícímu mapování.
+
+`join.py` navíc záměrně odmítne duplicitní klíče nebo oprávnění přiřazená k
+úseku, který v daném měsíci není v parkovacích datech. Chybu mapování je nutné
+vyřešit před spojením; data se už nesmí tiše zahodit.
 
 ## Analýza dat
 

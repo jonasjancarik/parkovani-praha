@@ -8,7 +8,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from web_app.explorer_analytics import build_overview_analytics
+from web_app.explorer_analytics import ForecastSettings, _forecast, build_overview_analytics
 from web_app.explorer_data import ExplorerFilters
 
 
@@ -86,3 +86,45 @@ def test_overview_analytics_respects_district_filter() -> None:
 
     assert {row["district"] for row in payload["parker_share_by_district"]} == {"P01"}
     assert {row["district"] for row in payload["forecast"]} == {"P01"}
+
+
+def test_invariant_analytics_ignore_uneven_time_of_day_coverage() -> None:
+    frame = analytics_sample()
+    frame = frame[
+        ~(
+            (frame["kod_useku"] == "B")
+            & (frame["cast_dne"] == "noc")
+            & (frame["date"] == pd.Timestamp("2025-01-31"))
+        )
+    ]
+
+    payload = build_overview_analytics(
+        frame,
+        ExplorerFilters(cast_dne=("noc",), zone_types=("RES", "MIX")),
+    )
+
+    january_spaces = [
+        row["value"] for row in payload["spaces_by_zone"]
+        if row["date"] == "2025-01-31"
+    ]
+    january_parkers = [
+        row["value"] for row in payload["parkers_by_type"]
+        if row["date"] == "2025-01-31" and row["series"] == "Rezidenti"
+    ]
+    assert sum(january_spaces) == 200
+    assert january_parkers == [50]
+
+
+def test_forecast_uses_elapsed_months_when_history_has_gaps() -> None:
+    pressure = pd.DataFrame(
+        [
+            {"date": pd.Timestamp("2025-01-31"), "mestska_cast": "P01", "value": 1.0},
+            {"date": pd.Timestamp("2025-03-31"), "mestska_cast": "P01", "value": 3.0},
+        ]
+    )
+
+    rows = _forecast(pressure, ForecastSettings(history_months=24, horizon_months=1))
+    forecast = next(row for row in rows if row["kind"] == "Predikce")
+
+    assert forecast["date"] == "2025-04-30"
+    assert forecast["value"] == 4.0

@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 
 try:
-    from .explorer_data import ExplorerFilters, _filter_rows
+    from .explorer_data import ExplorerFilters, _filter_rows, canonical_zone_month_rows
 except ImportError:  # Streamlit runs modules from web_app as top-level imports.
-    from explorer_data import ExplorerFilters, _filter_rows
+    from explorer_data import ExplorerFilters, _filter_rows, canonical_zone_month_rows
 
 
 PERMIT_TYPES = {
@@ -72,7 +72,11 @@ def _long_time_series(
     columns = _available_columns(base, list(measures.values()))
     if base.empty or not columns:
         return []
-    grouped = base.groupby("date", as_index=False)[columns].sum().sort_values("date")
+    grouped = (
+        base.groupby("date", as_index=False)[columns]
+        .sum(min_count=1)
+        .sort_values("date")
+    )
     label_by_column = {column: label for label, column in measures.items()}
     rows: list[dict] = []
     for row in grouped.itertuples(index=False):
@@ -83,7 +87,10 @@ def _long_time_series(
                 {
                     "date": date_value,
                     "series": label_by_column[column],
-                    "value": round(float(row_dict[column])),
+                    "value": (
+                        round(float(row_dict[column]))
+                        if pd.notna(row_dict[column]) else None
+                    ),
                 }
             )
     return rows
@@ -149,10 +156,14 @@ def _zsj_months(base: pd.DataFrame) -> pd.DataFrame:
         base.groupby(["date", "kod_zsj", "naz_zsj", "mestska_cast"], as_index=False)[
             ["POP_CELKEM", "parkovacich_mist_v_zps"]
         ]
-        .sum()
+        .sum(min_count=1)
         .sort_values("date")
     )
-    grouped = grouped[grouped["parkovacich_mist_v_zps"] > 0].copy()
+    grouped = grouped[
+        grouped["POP_CELKEM"].notna()
+        & grouped["parkovacich_mist_v_zps"].notna()
+        & (grouped["parkovacich_mist_v_zps"] > 0)
+    ].copy()
     grouped["permits_per_space"] = (
         grouped["POP_CELKEM"] / grouped["parkovacich_mist_v_zps"]
     )
@@ -229,10 +240,14 @@ def _district_pressure(base: pd.DataFrame) -> pd.DataFrame:
         base.groupby(["date", "mestska_cast"], as_index=False)[
             ["POP_CELKEM", "parkovacich_mist_v_zps"]
         ]
-        .sum()
+        .sum(min_count=1)
         .sort_values("date")
     )
-    grouped = grouped[grouped["parkovacich_mist_v_zps"] > 0].copy()
+    grouped = grouped[
+        grouped["POP_CELKEM"].notna()
+        & grouped["parkovacich_mist_v_zps"].notna()
+        & (grouped["parkovacich_mist_v_zps"] > 0)
+    ].copy()
     grouped["value"] = grouped["POP_CELKEM"] / grouped["parkovacich_mist_v_zps"]
     return grouped
 
@@ -258,7 +273,9 @@ def _forecast(
         window = group.tail(settings.history_months)
         if len(window) < 2:
             continue
-        x_values = np.arange(len(window))
+        periods = window["date"].dt.to_period("M").astype("int64")
+        origin_period = int(periods.iloc[0])
+        x_values = periods.to_numpy() - origin_period
         slope, intercept = np.polyfit(x_values, window["value"].to_numpy(), 1)
         residuals = window["value"].to_numpy() - (slope * x_values + intercept)
         spread = float(residuals.std(ddof=1)) if len(residuals) > 1 else 0
@@ -267,8 +284,9 @@ def _forecast(
             periods=settings.horizon_months,
             freq="ME",
         )
-        for index, future_date in enumerate(future_dates, start=len(window)):
-            predicted = float(slope * index + intercept)
+        for future_date in future_dates:
+            future_index = future_date.to_period("M").ordinal - origin_period
+            predicted = float(slope * future_index + intercept)
             rows.append(
                 {
                     "district": str(district),
@@ -287,20 +305,25 @@ def build_overview_analytics(
     filters: ExplorerFilters,
     forecast_settings: ForecastSettings = ForecastSettings(),
 ) -> dict:
-    scoped = _filter_rows(df, filters)
-    numeric_columns = list(PERMIT_TYPES.values()) + list(PARKER_TYPES.values()) + [
+    invariant_scoped = _filter_rows(df, filters, apply_cast_dne=False)
+    parker_scoped = _filter_rows(df, filters)
+    invariant_columns = list(PERMIT_TYPES.values()) + [
         "POP_CELKEM",
         "parkovacich_mist_v_zps",
     ]
-    base = _zone_month_values(scoped, numeric_columns)
+    base = _zone_month_values(
+        canonical_zone_month_rows(invariant_scoped),
+        invariant_columns,
+    )
+    parker_base = _zone_month_values(parker_scoped, list(PARKER_TYPES.values()))
     zsj_months = _zsj_months(base)
     district_pressure = _district_pressure(base)
     return {
         "zone_mix": _zone_mix(base),
-        "parker_share_by_district": _parker_share_by_district(base),
+        "parker_share_by_district": _parker_share_by_district(parker_base),
         "spaces_by_zone": _spaces_by_zone(base),
         "permits_by_type": _long_time_series(base, PERMIT_TYPES),
-        "parkers_by_type": _long_time_series(base, PARKER_TYPES),
+        "parkers_by_type": _long_time_series(parker_base, PARKER_TYPES),
         "zsj_changes": _zsj_changes(zsj_months),
         "zsj_pressure": _zsj_pressure_series(zsj_months),
         "forecast": _forecast(district_pressure, forecast_settings),

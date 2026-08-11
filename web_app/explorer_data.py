@@ -8,6 +8,13 @@ import pandas as pd
 
 
 DEFAULT_ZONE_TYPES = ("MIX", "OST", "RES", "VIS")
+INVARIANT_CAST_PRIORITY = {
+    "den": 0,
+    "Po-Pá": 1,
+    "Po-Pá (MPD)": 2,
+    "So-Ne": 3,
+    "noc": 4,
+}
 
 
 @dataclass(frozen=True)
@@ -33,19 +40,44 @@ def explorer_options(df: pd.DataFrame) -> dict:
     }
 
 
-def _filter_rows(df: pd.DataFrame, filters: ExplorerFilters) -> pd.DataFrame:
+def _filter_rows(
+    df: pd.DataFrame,
+    filters: ExplorerFilters,
+    *,
+    apply_cast_dne: bool = True,
+) -> pd.DataFrame:
     mask = pd.Series(True, index=df.index)
     if filters.start:
         mask &= df["date"] >= pd.Timestamp(filters.start)
     if filters.end:
         mask &= df["date"] <= pd.Timestamp(filters.end)
-    if filters.cast_dne:
+    if apply_cast_dne and filters.cast_dne:
         mask &= df["cast_dne"].isin(filters.cast_dne)
     if filters.districts:
         mask &= df["mestska_cast"].isin(filters.districts)
     if filters.zone_types:
         mask &= df["typ_zony"].isin(filters.zone_types)
     return df.loc[mask]
+
+
+def canonical_zone_month_rows(scoped: pd.DataFrame) -> pd.DataFrame:
+    """Select one stable row for measures that do not vary by time of day.
+
+    Historical exports do not contain every ``cast_dne`` category for every zone.
+    Filtering those rows before calculating permits or capacity creates artificial
+    jumps when source coverage changes. Prefer the canonical daytime row when it
+    exists and fall back deterministically to any available observation.
+    """
+    if scoped.empty:
+        return scoped.copy()
+    ranked = scoped.assign(
+        _cast_rank=scoped["cast_dne"].map(INVARIANT_CAST_PRIORITY).fillna(99)
+    )
+    return (
+        ranked.sort_values(["kod_useku", "date", "_cast_rank", "cast_dne"])
+        .drop_duplicates(subset=["kod_useku", "date"], keep="first")
+        .drop(columns="_cast_rank")
+    )
 
 
 def _unique_zone_months(scoped: pd.DataFrame) -> pd.DataFrame:
@@ -57,17 +89,20 @@ def _unique_zone_months(scoped: pd.DataFrame) -> pd.DataFrame:
         "POP_CELKEM",
         "parkovacich_mist_v_zps",
     ]
-    return (
-        scoped.loc[:, columns]
-        .sort_values(["kod_useku", "date"])
-        .drop_duplicates(subset=["kod_useku", "date"], keep="first")
-    )
+    return canonical_zone_month_rows(scoped).loc[:, columns]
 
 
 def _safe_change(current: float, initial: float) -> float | None:
-    if not initial:
+    if pd.isna(current) or pd.isna(initial) or not initial:
         return None
     return (current - initial) / initial
+
+
+def _rounded_or_none(value: object, digits: int = 0) -> int | float | None:
+    if pd.isna(value):
+        return None
+    number = float(value)
+    return round(number) if digits == 0 else round(number, digits)
 
 
 def build_explorer_payload(
@@ -75,7 +110,7 @@ def build_explorer_payload(
     filters: ExplorerFilters,
     district_limit: int = 5,
 ) -> dict:
-    scoped = _filter_rows(df, filters)
+    scoped = _filter_rows(df, filters, apply_cast_dne=False)
     options = explorer_options(df)
     if scoped.empty:
         return {
@@ -91,12 +126,13 @@ def build_explorer_payload(
         base.groupby("date", as_index=False)[
             ["POP_CELKEM", "parkovacich_mist_v_zps"]
         ]
-        .sum()
+        .sum(min_count=1)
         .sort_values("date")
     )
     series = series[series["parkovacich_mist_v_zps"] > 0].copy()
-    series["opravneni_na_misto"] = (
-        series["POP_CELKEM"] / series["parkovacich_mist_v_zps"]
+    series["POP_CELKEM"] = pd.to_numeric(series["POP_CELKEM"], errors="coerce")
+    series["opravneni_na_misto"] = series["POP_CELKEM"].div(
+        series["parkovacich_mist_v_zps"]
     )
 
     latest_date = base["date"].max()
@@ -105,7 +141,7 @@ def build_explorer_payload(
         latest.groupby("mestska_cast", as_index=False)[
             ["POP_CELKEM", "parkovacich_mist_v_zps"]
         ]
-        .sum()
+        .sum(min_count=1)
     )
     districts = districts[districts["parkovacich_mist_v_zps"] > 0].copy()
     districts["opravneni_na_misto"] = (
@@ -116,12 +152,17 @@ def build_explorer_payload(
     )
 
     first = series.iloc[0]
-    first_permits = series.loc[series["POP_CELKEM"] > 0].iloc[0]
-    first_ratio = series.loc[series["opravneni_na_misto"] > 0].iloc[0]
+    permit_series = series.loc[series["POP_CELKEM"].notna() & (series["POP_CELKEM"] > 0)]
+    ratio_series = series.loc[
+        series["opravneni_na_misto"].notna()
+        & (series["opravneni_na_misto"] > 0)
+    ]
     current = series.iloc[-1]
-    current_permits = float(current["POP_CELKEM"])
+    current_permits = current["POP_CELKEM"]
     current_spaces = float(current["parkovacich_mist_v_zps"])
-    current_ratio = float(current["opravneni_na_misto"])
+    current_ratio = current["opravneni_na_misto"]
+    first_permits = permit_series.iloc[0] if not permit_series.empty else None
+    first_ratio = ratio_series.iloc[0] if not ratio_series.empty else None
 
     return {
         "options": options,
@@ -129,34 +170,47 @@ def build_explorer_payload(
         "series": [
             {
                 "date": row.date.date().isoformat(),
-                "permits": round(float(row.POP_CELKEM)),
+                "permits": _rounded_or_none(row.POP_CELKEM),
                 "spaces": round(float(row.parkovacich_mist_v_zps)),
-                "permits_per_space": round(float(row.opravneni_na_misto), 3),
+                "permits_per_space": _rounded_or_none(row.opravneni_na_misto, 3),
             }
             for row in series.itertuples(index=False)
         ],
         "districts": [
             {
                 "district": row.mestska_cast,
-                "permits": round(float(row.POP_CELKEM)),
+                "permits": _rounded_or_none(row.POP_CELKEM),
                 "spaces": round(float(row.parkovacich_mist_v_zps)),
-                "permits_per_space": round(float(row.opravneni_na_misto), 3),
+                "permits_per_space": _rounded_or_none(row.opravneni_na_misto, 3),
             }
             for row in districts.itertuples(index=False)
         ],
         "summary": {
             "latest_date": current["date"].date().isoformat(),
-            "permits": round(current_permits),
+            "permits": _rounded_or_none(current_permits),
             "spaces": round(current_spaces),
-            "permits_per_space": round(current_ratio, 3),
+            "permits_per_space": _rounded_or_none(current_ratio, 3),
             "permits_change": _safe_change(
-                current_permits, float(first_permits["POP_CELKEM"])
-            ),
+                current_permits,
+                first_permits["POP_CELKEM"] if first_permits is not None else float("nan"),
+            ) if first_permits is not None else None,
             "spaces_change": _safe_change(
                 current_spaces, float(first["parkovacich_mist_v_zps"])
             ),
             "ratio_change": _safe_change(
-                current_ratio, float(first_ratio["opravneni_na_misto"])
+                current_ratio,
+                first_ratio["opravneni_na_misto"] if first_ratio is not None else float("nan"),
+            ) if first_ratio is not None else None,
+        },
+        "coverage": {
+            "permits_available": not permit_series.empty,
+            "permits_start": (
+                permit_series.iloc[0]["date"].date().isoformat()
+                if not permit_series.empty else None
+            ),
+            "permits_end": (
+                permit_series.iloc[-1]["date"].date().isoformat()
+                if not permit_series.empty else None
             ),
         },
     }

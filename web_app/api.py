@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Response
 from fastapi.staticfiles import StaticFiles
 
 WEB_APP_DIR = Path(__file__).resolve().parent
@@ -27,8 +27,35 @@ def parking_data() -> pd.DataFrame:
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health(response: Response) -> dict[str, str | int]:
+    try:
+        data = parking_data()
+        required = {
+            "date",
+            "kod_useku",
+            "POP_CELKEM",
+            "parkovacich_mist_v_zps",
+        }
+        missing = required.difference(data.columns)
+        if data.empty or missing:
+            response.status_code = 503
+            return {"status": "error", "detail": "parking data are incomplete"}
+        return {
+            "status": "ok",
+            "rows": len(data),
+            "latest_date": data["date"].max().date().isoformat(),
+        }
+    except Exception:
+        response.status_code = 503
+        return {"status": "error", "detail": "parking data are unavailable"}
+
+
+@lru_cache(maxsize=16)
+def explorer_payload(filters) -> dict:
+    data = parking_data()
+    payload = build_explorer_payload(data, filters)
+    payload["analytics"] = build_overview_analytics(data, filters)
+    return payload
 
 
 @app.get("/api/explorer")
@@ -40,10 +67,7 @@ def explorer(
     zone_type: list[str] | None = Query(default=None),
 ) -> dict:
     filters = make_filters(start, end, cast_dne, district, zone_type)
-    data = parking_data()
-    payload = build_explorer_payload(data, filters)
-    payload["analytics"] = build_overview_analytics(data, filters)
-    return payload
+    return explorer_payload(filters)
 
 
 FRONTEND_DIST = WEB_APP_DIR.parent / "frontend" / "dist"

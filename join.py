@@ -8,9 +8,33 @@ def load_data(parking_path, permits_path):
     return data_parking, data_permits
 
 
+def validate_permit_join_targets(data_parking, data_permits):
+    keys = ["kod_useku", "date"]
+    duplicates = data_permits.duplicated(keys, keep=False)
+    if duplicates.any():
+        examples = data_permits.loc[duplicates, keys].head(5).to_dict("records")
+        raise ValueError(f"Permit data contain duplicate zone-month keys: {examples}")
+
+    parking_keys = data_parking[keys].drop_duplicates()
+    unmatched = data_permits.merge(parking_keys, on=keys, how="left", indicator=True)
+    unmatched = unmatched[unmatched["_merge"] == "left_only"]
+    if not unmatched.empty:
+        total = int(unmatched.get("POP_CELKEM", pd.Series(dtype=float)).sum())
+        examples = unmatched[keys].head(5).to_dict("records")
+        raise ValueError(
+            f"Permit data target inactive zone-month keys ({len(unmatched)} rows, "
+            f"{total} permits): {examples}"
+        )
+
+
 def preprocess_data(data_parking, data_permits):
+    validate_permit_join_targets(data_parking, data_permits)
     data_merged = pd.merge(
-        data_parking, data_permits, on=["kod_useku", "date"], how="left"
+        data_parking,
+        data_permits,
+        on=["kod_useku", "date"],
+        how="left",
+        validate="many_to_one",
     )
     data_merged["date"] = pd.to_datetime(data_merged["date"])
     data_merged["year"] = data_merged["date"].dt.year
