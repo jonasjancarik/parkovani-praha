@@ -80,6 +80,11 @@ That filter applies only to parker composition and other measurements that genui
 change during the day; this prevents changes in historical source coverage from
 appearing as changes in parking capacity.
 
+The main chart shows the monthly observations as straight segments and preserves
+missing months as gaps. `Průměr z 12 měření` adds a trailing average from the 12
+latest available observations, while retaining those gaps in the trend line. It
+remains a visual overlay and never replaces API values or CSV exports.
+
 ### Production container
 
 The production image builds the React frontend and serves it together with the
@@ -263,6 +268,34 @@ uv run python process.py <typ-dat>
 - `all` - všechna předchozí data
 
 Některé výstupy jsou podobné, respektive mají překryvy. Nejužitečnější jsou první dva.
+
+#### Anomálie se opravují jen tehdy, když je chyba jednoznačně doložená
+
+Příprava parkovacích dat odděluje opravu zdrojové chyby od analytického
+vyhlazení. Hodnoty obsazenosti a složení parkujících se automaticky nepřepisují.
+Detektor je porovnává jen s předchozími 12 souvislými měsíci zvlášť pro každý
+úsek a část dne a podezřelé pohyby zapíše do
+`data/processed/data_parking_anomaly_report.json`.
+
+Automatická oprava se týká pouze dočasných chyb jmenovatele kapacity, u kterých
+souhlasí oba kapacitní sloupce, všechny dostupné části dne, souvislé období před
+i po chybě, stabilní typ zóny a zachovaný počet obsazených míst. Před změnou
+kapacity se uloží zdrojový počet obsazených míst a obsazenost se poté přepočítá
+na opravenou kapacitu; počty parkujících se tak uměle nezmění. Opravy i
+potvrzující datum jsou součástí stejného reportu.
+
+Build se zastaví, pokud po zpracování zůstanou duplicitní měsíční záznamy,
+kapacita se liší podle části dne nebo nesouhlasí odvozené součty. Případy, kdy
+zdroj uvádí více míst v ZPS než celkem, report označí, ale automaticky je
+nepřepisuje, protože z dat nelze bezpečně určit chybný sloupec. Přesné duplicity
+a nadbytečné kopie z cizí městské části se předem odstraní; úseky bez mapování
+na ZSJ zůstávají v datech označené jako `Nezařazený úsek`, místo aby se tiše
+zahodily.
+
+Pro kontrolní export bez korekcí lze použít `parking_no_anomaly`. Zapíše ho do
+`data/processed/data_parking_no_anomaly.csv` a nepřepíše hlavní dataset. Tento
+režim záměrně nevynucuje produkční kvalitativní brány a nemá se publikovat jako
+hlavní dataset.
 
 Navíc je možné zpracovat následující podkladové soubory, které nespadají pod `all`:
 
