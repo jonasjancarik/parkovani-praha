@@ -278,14 +278,16 @@ h1, h2, p { margin-top: 0; }
 .primary-content { min-width: 0; padding-right: 20px; }
 .insight-panel { border-left: 1px solid var(--rule); padding: 19px 0 0 18px; }
 
-.chart-section { height: 420px; padding-top: 23px; border-bottom: 1px solid var(--rule); }
+.chart-section { min-height: 460px; padding-top: 23px; border-bottom: 1px solid var(--rule); }
 .chart-section h2, .district-section h2, .data-table-view h2,
 .insight-panel h2, .map-empty-state h2 {
   font: 400 20px/1.15 "Newsreader", Georgia, serif;
   margin-bottom: 0;
 }
 .chart-section h2 { display: flex; align-items: center; gap: 8px; }
-.time-chart { height: 370px; width: 100%; }
+.chart-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.chart-heading .chart-toggle { margin-top: -3px; }
+.time-chart { height: 380px; width: 100%; }
 
 .district-section { min-height: 245px; padding-top: 15px; }
 .section-heading p { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
@@ -427,6 +429,7 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   cursor: pointer;
 }
 .chart-toggle button.active { color: var(--red); }
+.chart-toggle button:disabled { color: #aaa59a; cursor: not-allowed; }
 .chart-toggle button.active::after {
   content: "";
   position: absolute;
@@ -540,8 +543,10 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .workspace-grid { display: block; }
   .primary-content { padding-right: 0; }
   .insight-panel { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }
-  .chart-section { height: 380px; }
-  .time-chart { height: 325px; }
+  .chart-section { min-height: 445px; }
+  .chart-heading { display: block; }
+  .chart-heading .chart-toggle { margin-top: 12px; }
+  .time-chart { height: 330px; }
   .map-empty-state { grid-template-columns: 1fr; gap: 30px; padding-inline: 0; }
   .analytics-intro { display: block; }
   .analytics-intro p { margin-top: 8px; }

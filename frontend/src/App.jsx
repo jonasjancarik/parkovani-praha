@@ -9,6 +9,11 @@ import {
 import { EChart } from "./EChart.jsx";
 import { AnalyticsSections } from "./AnalyticsSections.jsx";
 import {
+  hasDrawableObservationAverage,
+  materializeMonthlyRows,
+  trailingObservationAverage,
+} from "./chartData.js";
+import {
   DateRange,
   DistrictSelect,
   MultiSelect,
@@ -127,18 +132,29 @@ function useMediaQuery(query) {
   return matches;
 }
 
-function lineChartOption(series, compact = false, reduceMotion = false, metric = "permits-spaces") {
+function lineChartOption(
+  series,
+  compact = false,
+  reduceMotion = false,
+  metric = "permits-spaces",
+  showTrend = false,
+) {
   const axisText = { color: "#73736f", fontFamily: "Inter, sans-serif", fontSize: 11 };
   const pointValue = (value) => Array.isArray(value) ? value[1] : value;
+  const chartRows = materializeMonthlyRows(
+    series,
+    ["permits", "spaces", "permits_per_space"],
+  );
   const common = {
     type: "line",
     showSymbol: false,
-    smooth: 0.22,
+    smooth: false,
+    connectNulls: false,
     lineStyle: { width: 2.2 },
     emphasis: { focus: "series" },
     endLabel: {
       show: true,
-      formatter: (params) => `${params.seriesName}\n${numberFormat.format(pointValue(params.value))}`,
+      formatter: (params) => `${params.seriesName}\n${formatNumber(pointValue(params.value))}`,
       fontFamily: "Newsreader, Georgia, serif",
       fontSize: 14,
       lineHeight: 19,
@@ -159,6 +175,7 @@ function lineChartOption(series, compact = false, reduceMotion = false, metric =
           left: 0,
           itemWidth: 18,
           itemHeight: 2,
+          data: ["Parkovací oprávnění", "Parkovací místa", "Oprávnění na místo"],
           formatter: (name) => ({
             "Parkovací oprávnění": "Oprávnění",
             "Parkovací místa": "Místa",
@@ -172,7 +189,7 @@ function lineChartOption(series, compact = false, reduceMotion = false, metric =
       backgroundColor: "#fffdf8",
       borderColor: "#d9d4ca",
       textStyle: { color: "#26251f", fontFamily: "Inter, sans-serif" },
-      valueFormatter: (value) => numberFormat.format(pointValue(value)),
+      valueFormatter: (value) => formatNumber(pointValue(value)),
     },
     xAxis: {
       type: "time",
@@ -209,43 +226,85 @@ function lineChartOption(series, compact = false, reduceMotion = false, metric =
       {
         ...common,
         name: "Parkovací oprávnění",
-        data: series.map((row) => [row.date, row.permits]),
+        data: chartRows.map((row) => [row.date, row.permits]),
         endLabel: { ...common.endLabel, show: !compact, color: RED },
-        lineStyle: { color: lineGradient("#ed827b", RED), width: 2.4 },
-        areaStyle: { color: areaGradient(RED) },
+        lineStyle: { color: lineGradient("#ed827b", RED), width: showTrend ? 1.3 : 2.4, opacity: showTrend ? 0.38 : 1 },
+        areaStyle: showTrend ? undefined : { color: areaGradient(RED) },
+        tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
       },
       {
         ...common,
         name: "Parkovací místa",
-        data: series.map((row) => [row.date, row.spaces]),
+        data: chartRows.map((row) => [row.date, row.spaces]),
         endLabel: { ...common.endLabel, show: !compact, color: TEAL, offset: [0, 14] },
-        lineStyle: { color: lineGradient("#799b98", TEAL), width: 2.4 },
-        areaStyle: { color: areaGradient(TEAL) },
+        lineStyle: { color: lineGradient("#799b98", TEAL), width: showTrend ? 1.3 : 2.4, opacity: showTrend ? 0.38 : 1 },
+        areaStyle: showTrend ? undefined : { color: areaGradient(TEAL) },
+        tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
       },
       {
         ...common,
         name: "Oprávnění na místo",
         yAxisIndex: 1,
-        data: series.map((row) => [row.date, row.permits_per_space]),
+        data: chartRows.map((row) => [row.date, row.permits_per_space]),
         endLabel: {
           ...common.endLabel,
           show: !compact,
           color: SLATE,
           offset: [0, -14],
-          formatter: (params) => `${params.seriesName}\n${ratioFormat.format(pointValue(params.value))}`,
+          formatter: (params) => `${params.seriesName}\n${formatRatio(pointValue(params.value))}`,
         },
-        lineStyle: { color: lineGradient("#aeb6c0", SLATE), width: 1.8 },
+        lineStyle: { color: lineGradient("#aeb6c0", SLATE), width: showTrend ? 1.1 : 1.8, opacity: showTrend ? 0.38 : 1 },
+        tooltip: { valueFormatter: (value) => formatRatio(pointValue(value)) },
       },
     ],
   };
+  if (showTrend) {
+    option.series.push(
+      {
+        ...common,
+        name: "Průměr z 12 měření · Parkovací oprávnění",
+        data: trailingObservationAverage(chartRows, "permits"),
+        endLabel: { show: false },
+        lineStyle: { color: RED, width: 2.6, type: "dashed" },
+        tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
+      },
+      {
+        ...common,
+        name: "Průměr z 12 měření · Parkovací místa",
+        data: trailingObservationAverage(chartRows, "spaces"),
+        endLabel: { show: false },
+        lineStyle: { color: TEAL, width: 2.6, type: "dashed" },
+        tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
+      },
+      {
+        ...common,
+        name: "Průměr z 12 měření · Oprávnění na místo",
+        yAxisIndex: 1,
+        data: trailingObservationAverage(chartRows, "permits_per_space"),
+        endLabel: { show: false },
+        lineStyle: { color: SLATE, width: 2.3, type: "dashed" },
+        tooltip: { valueFormatter: (value) => formatRatio(pointValue(value)) },
+      },
+    );
+  }
   if (metric === "pressure") {
     option.yAxis = [{ ...option.yAxis[1], position: "left" }];
-    option.series = [{ ...option.series[2], yAxisIndex: 0 }];
+    option.series = option.series.reduce((pressureSeries, item) => {
+      if (item.name.includes("Oprávnění na místo")) {
+        pressureSeries.push({ ...item, yAxisIndex: 0 });
+      }
+      return pressureSeries;
+    }, []);
     option.grid = compact
       ? { left: 48, right: 14, top: 58, bottom: 42 }
       : { left: 58, right: 122, top: 38, bottom: 42 };
   }
   return option;
+}
+
+function hasDrawableObservationTrend(series, keys) {
+  const rows = materializeMonthlyRows(series, keys);
+  return keys.some((key) => hasDrawableObservationAverage(rows, key));
 }
 
 function districtChartOption(districts, reduceMotion = false) {
@@ -305,11 +364,22 @@ function districtChartOption(districts, reduceMotion = false) {
 function ChartView({ payload, metric }) {
   const compactChart = useMediaQuery("(max-width: 760px)");
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const [trendRequested, setTrendRequested] = useState(false);
+  const trendAvailable = useMemo(
+    () => hasDrawableObservationTrend(
+      payload.series,
+      metric === "pressure"
+        ? ["permits_per_space"]
+        : ["permits", "spaces", "permits_per_space"],
+    ),
+    [payload.series, metric],
+  );
+  const showTrend = trendRequested && trendAvailable;
 
   const visibleDistricts = useMemo(() => payload.districts.slice(0, 5), [payload.districts]);
   const lineOption = useMemo(
-    () => lineChartOption(payload.series, compactChart, reduceMotion, metric),
-    [payload.series, compactChart, reduceMotion, metric],
+    () => lineChartOption(payload.series, compactChart, reduceMotion, metric, showTrend),
+    [payload.series, compactChart, reduceMotion, metric, showTrend],
   );
   const districtOption = useMemo(
     () => districtChartOption(visibleDistricts, reduceMotion),
@@ -319,9 +389,22 @@ function ChartView({ payload, metric }) {
   return (
     <>
       <section className="chart-section" aria-labelledby="time-heading">
-        <h2 id="time-heading">
-          Vývoj v čase <IconInfoCircle size={15} stroke={1.5} aria-label="Nápověda" />
-        </h2>
+        <div className="section-heading chart-heading">
+          <div>
+            <h2 id="time-heading">
+              Vývoj v čase <IconInfoCircle size={15} stroke={1.5} aria-label="Nápověda" />
+            </h2>
+            <p>{showTrend
+              ? "Čárkovaně je průměr z posledních 12 dostupných měření. Přerušení ukazují měsíce bez dat."
+              : trendAvailable
+                ? "Čára spojuje jednotlivé měsíční hodnoty a přerušuje se tam, kde data chybí."
+                : "Pro zobrazení průměru rozšiřte období alespoň na 13 dostupných měření."}</p>
+          </div>
+          <div className="chart-toggle" role="group" aria-label="Zobrazení vývoje">
+            <button type="button" className={!showTrend ? "active" : ""} aria-pressed={!showTrend} onClick={() => setTrendRequested(false)}>Měsíční hodnoty</button>
+            <button type="button" className={showTrend ? "active" : ""} aria-pressed={showTrend} disabled={!trendAvailable} onClick={() => setTrendRequested(true)}>Průměr z 12 měření</button>
+          </div>
+        </div>
         <EChart
           option={lineOption}
           className="time-chart"

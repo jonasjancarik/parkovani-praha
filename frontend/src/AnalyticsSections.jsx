@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { EChart } from "./EChart.jsx";
+import { materializeMonthlyRows } from "./chartData.js";
 
 const COLORS = ["#e33b32", "#114f50", "#667386", "#9a684f", "#8a866c", "#b48b87"];
 const ZONE_LABELS = { MIX: "Smíšená", OST: "Ostatní", RES: "Rezidentní", VIS: "Návštěvnická" };
 const ZONE_COLORS = { MIX: "#e33b32", RES: "#114f50", VIS: "#667386", OST: "#9a684f" };
 const numberFormat = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 });
 const ratioFormat = new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const scalarValue = (value) => Array.isArray(value) ? value.at(-1) : value;
+const formatNumber = (value) => scalarValue(value) == null ? "—" : numberFormat.format(scalarValue(value));
+const formatRatio = (value) => scalarValue(value) == null ? "—" : ratioFormat.format(scalarValue(value));
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -81,6 +85,10 @@ function compactSeries(rows, limit = 5) {
 function timeSeriesOption(rows, { stacked = true } = {}) {
   const compactRows = compactSeries(rows);
   const dates = [...new Set(compactRows.map((row) => row.date))].sort();
+  const calendarDates = materializeMonthlyRows(
+    dates.map((date) => ({ date, present: true })),
+    ["present"],
+  ).map((row) => row.date);
   const names = [...new Set(compactRows.map((row) => row.series))];
   const valueByKey = new Map(compactRows.map((row) => [`${row.date}|${row.series}`, row.value]));
   return {
@@ -99,15 +107,14 @@ function timeSeriesOption(rows, { stacked = true } = {}) {
       backgroundColor: "#fffdf8",
       borderColor: "#d9d4ca",
       textStyle: { color: "#26251f", fontFamily: "Inter, sans-serif" },
-      valueFormatter: (value) => numberFormat.format(value),
+      valueFormatter: formatNumber,
     },
     xAxis: {
-      type: "category",
+      type: "time",
       boundaryGap: false,
-      data: dates,
       axisLine: { lineStyle: { color: "#aaa59a" } },
       axisTick: { show: false },
-      axisLabel: { ...axisText, formatter: (value) => value.slice(0, 4), interval: 11 },
+      axisLabel: { ...axisText, formatter: (value) => new Date(value).getFullYear(), hideOverlap: true },
     },
     yAxis: {
       type: "value",
@@ -119,8 +126,9 @@ function timeSeriesOption(rows, { stacked = true } = {}) {
       type: "line",
       stack: stacked ? "total" : undefined,
       showSymbol: false,
-      smooth: 0.18,
-      data: dates.map((date) => valueByKey.get(`${date}|${name}`) ?? 0),
+      smooth: false,
+      connectNulls: false,
+      data: calendarDates.map((date) => [date, valueByKey.get(`${date}|${name}`) ?? null]),
       lineStyle: {
         width: 1.5,
         color: lineGradient(COLORS[index % COLORS.length], `${COLORS[index % COLORS.length]}70`),
@@ -377,6 +385,10 @@ function ChangeSection({ analytics, reduceMotion }) {
 
 function zsjPressureOption(rows) {
   const dates = [...new Set(rows.map((row) => row.date))].sort();
+  const calendarDates = materializeMonthlyRows(
+    dates.map((date) => ({ date, present: true })),
+    ["present"],
+  ).map((row) => row.date);
   const names = [...new Set(rows.map((row) => row.name))];
   const valueByKey = new Map(rows.map((row) => [`${row.date}|${row.name}`, row.value]));
   return {
@@ -384,15 +396,16 @@ function zsjPressureOption(rows) {
     color: COLORS,
     grid: { left: 48, right: 18, top: 48, bottom: 38 },
     legend: { top: 0, left: 0, itemWidth: 15, itemHeight: 3, textStyle: { ...axisText, fontSize: 8 } },
-    tooltip: { trigger: "axis", valueFormatter: (value) => ratioFormat.format(value) },
-    xAxis: { type: "category", boundaryGap: false, data: dates, axisLabel: { ...axisText, formatter: (value) => value.slice(0, 4), interval: 11 }, axisTick: { show: false }, axisLine: { lineStyle: { color: "#aaa59a" } } },
+    tooltip: { trigger: "axis", valueFormatter: formatRatio },
+    xAxis: { type: "time", boundaryGap: false, axisLabel: { ...axisText, formatter: (value) => new Date(value).getFullYear(), hideOverlap: true }, axisTick: { show: false }, axisLine: { lineStyle: { color: "#aaa59a" } } },
     yAxis: { type: "value", axisLabel: { ...axisText, formatter: (value) => ratioFormat.format(value) }, splitLine },
     series: names.map((name, index) => ({
       name,
       type: "line",
       showSymbol: false,
-      smooth: 0.16,
-      data: dates.map((date) => valueByKey.get(`${date}|${name}`) ?? null),
+      smooth: false,
+      connectNulls: false,
+      data: calendarDates.map((date) => [date, valueByKey.get(`${date}|${name}`) ?? null]),
       lineStyle: { width: index === 0 ? 2.2 : 1.2, type: index > 4 ? "dashed" : "solid" },
       emphasis: { focus: "series" },
     })),
@@ -403,12 +416,14 @@ function forecastOption(rows, district) {
   const selected = rows.filter((row) => row.district === district);
   const actual = selected.filter((row) => row.kind === "Skutečnost");
   const forecast = selected.filter((row) => row.kind === "Predikce");
+  const actualWithGaps = materializeMonthlyRows(actual, ["value"]);
+  const forecastWithGaps = materializeMonthlyRows(forecast, ["value"]);
   return {
     animationDuration: 450,
     color: ["#114f50", "#e33b32"],
     grid: { left: 48, right: 18, top: 30, bottom: 38 },
     legend: { top: 0, left: 0, itemWidth: 16, itemHeight: 3, textStyle: { ...axisText, fontSize: 9 } },
-    tooltip: { trigger: "axis", valueFormatter: (value) => ratioFormat.format(value) },
+    tooltip: { trigger: "axis", valueFormatter: formatRatio },
     xAxis: { type: "time", axisLabel: { ...axisText, formatter: "{yyyy}" }, axisLine: { lineStyle: { color: "#aaa59a" } }, splitLine: { show: false } },
     yAxis: { type: "value", axisLabel: { ...axisText, formatter: (value) => ratioFormat.format(value) }, splitLine },
     series: [
@@ -416,15 +431,16 @@ function forecastOption(rows, district) {
         name: "Skutečnost",
         type: "line",
         showSymbol: false,
-        smooth: 0.18,
-        data: actual.map((row) => [row.date, row.value]),
+        smooth: false,
+        connectNulls: false,
+        data: actualWithGaps.map((row) => [row.date, row.value]),
         lineStyle: { width: 2.1, color: lineGradient("#114f50", "#8ba4a0") },
       },
       {
         name: "Predikce",
         type: "line",
         showSymbol: false,
-        data: forecast.map((row) => [row.date, row.value]),
+        data: forecastWithGaps.map((row) => [row.date, row.value]),
         lineStyle: { width: 2, type: "dashed", color: "#e33b32" },
       },
     ],
