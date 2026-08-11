@@ -20,7 +20,7 @@ echarts.use([
   TooltipComponent,
 ]);
 
-export function EChart({ option, className = "" }) {
+export function EChart({ option, className = "", ariaLabel }) {
   const elementRef = useRef(null);
 
   useEffect(() => {
@@ -35,5 +35,12 @@ export function EChart({ option, className = "" }) {
     };
   }, [option]);
 
-  return <div ref={elementRef} className={className} />;
+  return (
+    <div
+      ref={elementRef}
+      className={className}
+      role="img"
+      aria-label={ariaLabel}
+    />
+  );
 }

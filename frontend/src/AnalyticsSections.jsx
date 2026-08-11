@@ -7,6 +7,21 @@ const ZONE_LABELS = { MIX: "Smíšená", OST: "Ostatní", RES: "Rezidentní", VI
 const ZONE_COLORS = { MIX: "#e33b32", RES: "#114f50", VIS: "#667386", OST: "#9a684f" };
 const numberFormat = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 });
 const ratioFormat = new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return reduced;
+}
+
+function motionOption(option, reduceMotion) {
+  return reduceMotion ? { ...option, animationDuration: 0 } : option;
+}
 const percentFormat = new Intl.NumberFormat("cs-CZ", { style: "percent", maximumFractionDigits: 0 });
 
 const axisText = { color: "#77736a", fontFamily: "Inter, sans-serif", fontSize: 10 };
@@ -124,6 +139,7 @@ function ChartToggle({ options, value, onChange, label }) {
           key={option.value}
           type="button"
           className={value === option.value ? "active" : ""}
+          aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
         >
           {option.label}
@@ -145,7 +161,7 @@ function AnalysisHeader({ title, subtitle, children }) {
   );
 }
 
-function TrendBreakdown({ analytics }) {
+function TrendBreakdown({ analytics, reduceMotion }) {
   const [mode, setMode] = useState("spaces");
   const configuration = {
     spaces: {
@@ -164,7 +180,10 @@ function TrendBreakdown({ analytics }) {
       subtitle: "Vývoj odhadovaného počtu parkujících podle skupiny",
     },
   }[mode];
-  const option = useMemo(() => timeSeriesOption(configuration.rows), [configuration.rows]);
+  const option = useMemo(
+    () => motionOption(timeSeriesOption(configuration.rows), reduceMotion),
+    [configuration.rows, reduceMotion],
+  );
   return (
     <section className="analysis-section trend-breakdown">
       <AnalysisHeader title={configuration.title} subtitle={configuration.subtitle}>
@@ -179,7 +198,7 @@ function TrendBreakdown({ analytics }) {
           ]}
         />
       </AnalysisHeader>
-      <EChart option={option} className="analysis-chart analysis-chart-wide" />
+      <EChart option={option} className="analysis-chart analysis-chart-wide" ariaLabel={`${configuration.title}: ${configuration.subtitle}`} />
     </section>
   );
 }
@@ -236,18 +255,21 @@ function parkerShareOption(rows) {
   };
 }
 
-function CompositionSection({ analytics }) {
-  const zoneOption = useMemo(() => zoneMixOption(analytics.zone_mix), [analytics.zone_mix]);
+function CompositionSection({ analytics, reduceMotion }) {
+  const zoneOption = useMemo(
+    () => motionOption(zoneMixOption(analytics.zone_mix), reduceMotion),
+    [analytics.zone_mix, reduceMotion],
+  );
   const parkerOption = useMemo(
-    () => parkerShareOption(analytics.parker_share_by_district),
-    [analytics.parker_share_by_district],
+    () => motionOption(parkerShareOption(analytics.parker_share_by_district), reduceMotion),
+    [analytics.parker_share_by_district, reduceMotion],
   );
   return (
     <section className="analysis-section composition-section">
       <div className="composition-grid">
         <div className="composition-panel zone-composition">
           <AnalysisHeader title="Složení parkovací kapacity" subtitle="Podíl míst podle typu regulované zóny" />
-          <EChart option={zoneOption} className="zone-mix-chart" />
+          <EChart option={zoneOption} className="zone-mix-chart" ariaLabel="Podíl parkovacích míst v rezidentních, smíšených, návštěvnických a ostatních zónách" />
           <dl className="zone-legend">
             {analytics.zone_mix.map((row) => (
               <div key={row.zone_type}>
@@ -259,7 +281,7 @@ function CompositionSection({ analytics }) {
         </div>
         <div className="composition-panel parker-composition">
           <AnalysisHeader title="Složení parkujících podle městské části" subtitle="Podíl jednotlivých skupin na celkovém počtu parkujících" />
-          <EChart option={parkerOption} className="parker-share-chart" />
+          <EChart option={parkerOption} className="parker-share-chart" ariaLabel="Složení skupin parkujících podle městské části" />
         </div>
       </div>
     </section>
@@ -287,7 +309,18 @@ function changeScatterOption(rows) {
 }
 
 function histogramOption(rows) {
-  const values = rows.map((row) => row.annual_change).filter(Number.isFinite);
+  const values = rows.reduce((result, row) => {
+    if (Number.isFinite(row.annual_change)) result.push(row.annual_change);
+    return result;
+  }, []);
+  if (values.length === 0) {
+    return {
+      animationDuration: 0,
+      xAxis: { type: "category", data: [] },
+      yAxis: { type: "value" },
+      series: [{ type: "bar", data: [] }],
+    };
+  }
   const min = Math.min(...values);
   const max = Math.max(...values);
   const binCount = 14;
@@ -315,11 +348,14 @@ function histogramOption(rows) {
   };
 }
 
-function ChangeSection({ analytics }) {
+function ChangeSection({ analytics, reduceMotion }) {
   const [mode, setMode] = useState("scatter");
   const option = useMemo(
-    () => mode === "scatter" ? changeScatterOption(analytics.zsj_changes) : histogramOption(analytics.zsj_changes),
-    [analytics.zsj_changes, mode],
+    () => motionOption(
+      mode === "scatter" ? changeScatterOption(analytics.zsj_changes) : histogramOption(analytics.zsj_changes),
+      reduceMotion,
+    ),
+    [analytics.zsj_changes, mode, reduceMotion],
   );
   return (
     <section className="analysis-section change-section">
@@ -334,7 +370,7 @@ function ChangeSection({ analytics }) {
           options={[{ value: "scatter", label: "Souvislosti" }, { value: "histogram", label: "Rozložení" }]}
         />
       </AnalysisHeader>
-      <EChart option={option} className="analysis-chart change-chart" />
+      <EChart option={option} className="analysis-chart change-chart" ariaLabel="Roční změna počtu parkovacích oprávnění v základních sídelních jednotkách" />
     </section>
   );
 }
@@ -395,34 +431,38 @@ function forecastOption(rows, district) {
   };
 }
 
-function PressureAndForecast({ analytics }) {
+function PressureAndForecast({ analytics, reduceMotion }) {
   const districts = useMemo(
     () => [...new Set(analytics.forecast.map((row) => row.district))].sort(),
     [analytics.forecast],
   );
-  const [district, setDistrict] = useState(districts[0] ?? "");
-  useEffect(() => {
-    if (!districts.includes(district)) setDistrict(districts[0] ?? "");
-  }, [district, districts]);
-  const pressureOption = useMemo(() => zsjPressureOption(analytics.zsj_pressure), [analytics.zsj_pressure]);
-  const forecastChart = useMemo(() => forecastOption(analytics.forecast, district), [analytics.forecast, district]);
+  const [selectedDistrict, setSelectedDistrict] = useState(districts[0] ?? "");
+  const district = districts.includes(selectedDistrict) ? selectedDistrict : (districts[0] ?? "");
+  const pressureOption = useMemo(
+    () => motionOption(zsjPressureOption(analytics.zsj_pressure), reduceMotion),
+    [analytics.zsj_pressure, reduceMotion],
+  );
+  const forecastChart = useMemo(
+    () => motionOption(forecastOption(analytics.forecast, district), reduceMotion),
+    [analytics.forecast, district, reduceMotion],
+  );
   return (
     <section className="analysis-section pressure-forecast-section">
       <div className="pressure-forecast-grid">
         <div>
           <AnalysisHeader title="Lokality s nejvyšším tlakem" subtitle="Oprávnění na jedno parkovací místo v šesti nejzatíženějších lokalitách" />
-          <EChart option={pressureOption} className="analysis-chart pressure-chart" />
+          <EChart option={pressureOption} className="analysis-chart pressure-chart" ariaLabel="Vývoj tlaku na parkování v šesti nejzatíženějších lokalitách" />
         </div>
         <div>
           <AnalysisHeader title="Výhled tlaku na parkování" subtitle="Dvanáctiměsíční trend podle posledních 24 měsíců">
             <label className="forecast-select">
               <span>Městská část</span>
-              <select value={district} onChange={(event) => setDistrict(event.target.value)}>
+              <select value={district} onChange={(event) => setSelectedDistrict(event.target.value)}>
                 {districts.map((value) => <option value={value} key={value}>{districtLabel(value)}</option>)}
               </select>
             </label>
           </AnalysisHeader>
-          <EChart option={forecastChart} className="analysis-chart forecast-chart" />
+          <EChart option={forecastChart} className="analysis-chart forecast-chart" ariaLabel={`Dvanáctiměsíční výhled tlaku na parkování pro ${districtLabel(district)}`} />
           <p className="forecast-note"><IconInfoCircle size={14} stroke={1.5} /> Predikce prodlužuje současný trend; nejde o závazný scénář.</p>
         </div>
       </div>
@@ -431,17 +471,18 @@ function PressureAndForecast({ analytics }) {
 }
 
 export function AnalyticsSections({ analytics }) {
+  const reduceMotion = useReducedMotion();
   if (!analytics) return null;
   return (
     <div className="analytics-sections">
       <div className="analytics-intro">
         <span>Podrobnější analýzy</span>
-        <p>Stejné filtry platí pro všechny následující pohledy.</p>
+        <p>Období, městská část a typ zóny platí všude; část dne ovlivňuje jen složení parkujících.</p>
       </div>
-      <TrendBreakdown analytics={analytics} />
-      <CompositionSection analytics={analytics} />
-      <ChangeSection analytics={analytics} />
-      <PressureAndForecast analytics={analytics} />
+      <TrendBreakdown analytics={analytics} reduceMotion={reduceMotion} />
+      <CompositionSection analytics={analytics} reduceMotion={reduceMotion} />
+      <ChangeSection analytics={analytics} reduceMotion={reduceMotion} />
+      <PressureAndForecast analytics={analytics} reduceMotion={reduceMotion} />
     </div>
   );
 }

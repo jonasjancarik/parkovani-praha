@@ -13,6 +13,13 @@
 - Internal-browser implementation: `docs/design/implementation-internal-browser-1280-final.png` at the browser's native 1280 × 720 viewport
 - Internal-browser focused comparison: `docs/design/comparison-internal-browser-1280-final.png` (local QA artifact, ignored by Git)
 
+> **Current implementation note (2026-08-11):** The captures above predate the
+> product-hardening pass. The inactive address field was replaced with working
+> share/reset actions, mobile filters now collapse behind a summary control, and
+> the unfinished map uses explicit “připravujeme” copy. Re-capture the comparison
+> images during the next visual-fidelity review; the historical measurements below
+> describe the previous search-field layout.
+
 ## Fidelity review
 
 - Layout and spacing: the masthead, three-column introduction, tabs, filter row, chart canvas, district comparison, and insight rail align with the reference hierarchy and proportions. The filter row and address search remain one continuous 98px band both before and after it becomes sticky.
