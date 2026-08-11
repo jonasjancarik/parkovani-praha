@@ -16,6 +16,24 @@ class TemporaryRegime:
     months: int
 
 
+@dataclass(frozen=True)
+class VerifiedCapacityCorrection:
+    code: str
+    start_date: pd.Timestamp
+    end_date: pd.Timestamp
+    months: int
+    original_zps: float
+    corrected_zps: float
+    original_total: float
+    corrected_total: float
+    zps_jump_ratio: float
+    total_jump_ratio: float
+    occupied_before: float
+    occupied_during: float
+    occupied_after: float
+    confirmed_at: pd.Timestamp
+
+
 def _build_regimes(series: pd.Series) -> list[tuple[int, int, float]]:
     if series.empty:
         return []
@@ -136,3 +154,252 @@ def apply_temporary_capacity_regime_cleanup(
                 df_out.loc[mask, column] = regime.replacement_value
 
     return df_out
+
+
+def apply_verified_capacity_regime_cleanup(
+    df: pd.DataFrame,
+    *,
+    code_col: str,
+    date_col: str,
+    zps_capacity_col: str,
+    total_capacity_col: str,
+    occupancy_col: str,
+    occupancy_scale: float = 100.0,
+    category_col: str | None = None,
+    context_months: int = 3,
+    max_temp_months: int = 24,
+    reversion_rel_tolerance: float = 0.10,
+    reversion_abs_tolerance: float = 3.0,
+    min_jump_ratio: float = 0.50,
+    min_jump_abs: float = 20.0,
+    paired_ratio_tolerance: float = 0.06,
+    cast_agreement_rel_tolerance: float = 0.01,
+    cast_agreement_abs_tolerance: float = 1.0,
+    occupied_rel_tolerance: float = 0.20,
+    occupied_abs_tolerance: float = 3.0,
+    as_of: pd.Timestamp | str | None = None,
+) -> tuple[pd.DataFrame, list[VerifiedCapacityCorrection]]:
+    """Correct only strongly corroborated temporary capacity denominator errors.
+
+    A correction requires contiguous stable context on both sides, matching jumps
+    in both capacity measures, agreement across all available time variants, a
+    stable implied occupied-vehicle numerator, and one stable zone category
+    across the full context. The numerator is preserved when occupancy is
+    rebased onto corrected capacity.
+    """
+    required = {
+        code_col,
+        date_col,
+        zps_capacity_col,
+        total_capacity_col,
+        occupancy_col,
+    }
+    if category_col is not None:
+        required.add(category_col)
+    missing = required.difference(df.columns)
+    if missing:
+        raise ValueError(
+            "Cannot verify capacity regimes; missing columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    result = df.copy()
+    result[date_col] = pd.to_datetime(result[date_col])
+    numeric_columns = [zps_capacity_col, total_capacity_col, occupancy_col]
+    numeric = result[numeric_columns].apply(pd.to_numeric, errors="coerce")
+    raw_occupied = (
+        numeric[zps_capacity_col]
+        * numeric[occupancy_col]
+        / occupancy_scale
+    )
+    working = result[[code_col, date_col]].copy()
+    working[numeric_columns] = numeric
+    working["_occupied"] = raw_occupied
+    if category_col is not None:
+        working[category_col] = result[category_col]
+
+    corrections: list[VerifiedCapacityCorrection] = []
+    analysis_cutoff = pd.Timestamp(as_of) if as_of is not None else None
+    for code, rows in working.groupby(code_col, sort=False, dropna=False):
+        if analysis_cutoff is not None:
+            rows = rows[rows[date_col] <= analysis_cutoff]
+        monthly = (
+            rows.groupby(date_col, as_index=True)[
+                [zps_capacity_col, total_capacity_col, "_occupied"]
+            ]
+            .median()
+            .sort_index()
+        )
+        if len(monthly) < (context_months * 2 + 1):
+            continue
+
+        zps_series = monthly[zps_capacity_col].dropna()
+        regimes = _build_regimes(zps_series)
+        for regime_index in range(1, len(regimes) - 1):
+            start_idx, end_idx, regime_zps = regimes[regime_index]
+            start_date = zps_series.index[start_idx]
+            end_date = zps_series.index[end_idx]
+            expected_regime_index = pd.date_range(start_date, end_date, freq="ME")
+            months = len(expected_regime_index)
+            if months > max_temp_months or months != end_idx - start_idx + 1:
+                continue
+
+            before_index = pd.date_range(
+                start_date - pd.offsets.MonthEnd(context_months),
+                periods=context_months,
+                freq="ME",
+            )
+            after_index = pd.date_range(
+                end_date + pd.offsets.MonthEnd(1),
+                periods=context_months,
+                freq="ME",
+            )
+            required_index = before_index.append(expected_regime_index).append(
+                after_index
+            )
+            window = monthly.reindex(required_index)
+            if window[[zps_capacity_col, total_capacity_col, "_occupied"]].isna().any().any():
+                continue
+
+            before = window.loc[before_index]
+            during = window.loc[expected_regime_index]
+            after = window.loc[after_index]
+            before_zps = float(before[zps_capacity_col].median())
+            after_zps = float(after[zps_capacity_col].median())
+            baseline_zps = float(np.median([before_zps, after_zps]))
+            zps_tolerance = max(
+                reversion_abs_tolerance,
+                abs(baseline_zps) * reversion_rel_tolerance,
+            )
+            if (
+                _spread(before[zps_capacity_col]) > zps_tolerance
+                or _spread(after[zps_capacity_col]) > zps_tolerance
+                or abs(before_zps - after_zps) > zps_tolerance
+            ):
+                continue
+            zps_jump = regime_zps - baseline_zps
+            zps_jump_abs = abs(zps_jump)
+            zps_jump_ratio = zps_jump / max(abs(baseline_zps), 1.0)
+            if zps_jump_abs < min_jump_abs or abs(zps_jump_ratio) < min_jump_ratio:
+                continue
+
+            before_total = float(before[total_capacity_col].median())
+            after_total = float(after[total_capacity_col].median())
+            baseline_total = float(np.median([before_total, after_total]))
+            regime_total = float(during[total_capacity_col].median())
+            total_tolerance = max(
+                reversion_abs_tolerance,
+                abs(baseline_total) * reversion_rel_tolerance,
+            )
+            if (
+                _spread(before[total_capacity_col]) > total_tolerance
+                or _spread(during[total_capacity_col]) > total_tolerance
+                or _spread(after[total_capacity_col]) > total_tolerance
+                or abs(before_total - after_total) > total_tolerance
+            ):
+                continue
+            total_jump_ratio = (regime_total - baseline_total) / max(
+                abs(baseline_total), 1.0
+            )
+            zps_factor = regime_zps / max(abs(baseline_zps), 1.0)
+            total_factor = regime_total / max(abs(baseline_total), 1.0)
+            paired_factor_difference = abs(zps_factor - total_factor) / max(
+                abs(zps_factor), abs(total_factor), 1.0
+            )
+            if paired_factor_difference > paired_ratio_tolerance:
+                continue
+
+            relevant_rows = rows[rows[date_col].isin(required_index)]
+            if not _variants_agree(
+                relevant_rows,
+                date_col=date_col,
+                value_columns=[zps_capacity_col, total_capacity_col],
+                relative_tolerance=cast_agreement_rel_tolerance,
+                absolute_tolerance=cast_agreement_abs_tolerance,
+            ):
+                continue
+            if category_col is not None:
+                categories = relevant_rows[category_col].dropna()
+                if categories.nunique() > 1:
+                    continue
+
+            occupied_before = float(before["_occupied"].median())
+            occupied_during = float(during["_occupied"].median())
+            occupied_after = float(after["_occupied"].median())
+            occupied_context = pd.concat(
+                [before["_occupied"], after["_occupied"]], ignore_index=True
+            )
+            occupied_baseline = float(occupied_context.median())
+            occupied_mad = float(
+                np.median(np.abs(occupied_context - occupied_baseline))
+            )
+            occupied_tolerance = max(
+                occupied_abs_tolerance,
+                abs(occupied_baseline) * occupied_rel_tolerance,
+                3 * 1.4826 * occupied_mad,
+            )
+            if abs(occupied_during - occupied_baseline) > occupied_tolerance:
+                continue
+
+            corrected_zps = float(round(baseline_zps))
+            corrected_total = float(round(baseline_total))
+            regime_mask = (result[code_col] == code) & result[date_col].isin(
+                expected_regime_index
+            )
+            rebased_occupancy = (
+                raw_occupied.loc[regime_mask]
+                .div(corrected_zps)
+                .mul(occupancy_scale)
+            )
+            if (
+                rebased_occupancy.isna().any()
+                or (rebased_occupancy < 0).any()
+                or (rebased_occupancy > occupancy_scale).any()
+            ):
+                continue
+
+            result.loc[regime_mask, zps_capacity_col] = corrected_zps
+            result.loc[regime_mask, total_capacity_col] = corrected_total
+            result.loc[regime_mask, occupancy_col] = rebased_occupancy
+            corrections.append(
+                VerifiedCapacityCorrection(
+                    code=str(code),
+                    start_date=pd.Timestamp(start_date),
+                    end_date=pd.Timestamp(end_date),
+                    months=months,
+                    original_zps=float(regime_zps),
+                    corrected_zps=corrected_zps,
+                    original_total=regime_total,
+                    corrected_total=corrected_total,
+                    zps_jump_ratio=round(float(zps_jump_ratio), 6),
+                    total_jump_ratio=round(float(total_jump_ratio), 6),
+                    occupied_before=round(occupied_before, 6),
+                    occupied_during=round(occupied_during, 6),
+                    occupied_after=round(occupied_after, 6),
+                    confirmed_at=pd.Timestamp(after_index[-1]),
+                )
+            )
+
+    return result, corrections
+
+
+def _spread(series: pd.Series) -> float:
+    return float(series.max() - series.min())
+
+
+def _variants_agree(
+    rows: pd.DataFrame,
+    *,
+    date_col: str,
+    value_columns: Iterable[str],
+    relative_tolerance: float,
+    absolute_tolerance: float,
+) -> bool:
+    for column in value_columns:
+        grouped = rows.groupby(date_col)[column]
+        spread = grouped.max() - grouped.min()
+        median = grouped.median().abs()
+        tolerance = np.maximum(absolute_tolerance, median * relative_tolerance)
+        if (spread > tolerance).any():
+            return False
+    return True

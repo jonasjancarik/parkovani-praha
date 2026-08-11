@@ -4,18 +4,11 @@ import numpy as np
 import pandas as pd
 
 from config import PARKING_PATH
-from src.parking_cleanup import apply_temporary_capacity_regime_cleanup
 
 
 def load_parking_data() -> pd.DataFrame:
     df = pd.read_csv(PARKING_PATH)
     df["date"] = pd.to_datetime(df["date"])
-    df = apply_temporary_capacity_regime_cleanup(
-        df,
-        code_col="kod_useku",
-        date_col="date",
-        capacity_cols=["parkovacich_mist_v_zps", "parkovacich_mist_celkem"],
-    )
     df["year"] = df["date"].dt.year
     df["month"] = df["date"].dt.month
     return df

@@ -1,10 +1,23 @@
 import os
+from dataclasses import asdict
+from pathlib import Path
+
 import pandas as pd
-import numpy as np
 import json
 import sys
 from src import mapping, utils
-from src.parking_cleanup import apply_temporary_capacity_regime_cleanup
+from src.parking_anomalies import (
+    AnomalyDetectionConfig,
+    RAW_COMPOSITION_COLUMNS,
+    RAW_OCCUPANCY_COLUMNS,
+    build_anomaly_audit,
+    detect_monthly_anomaly_candidates,
+    normalize_parking_observations,
+    recompute_derived_parking_measures,
+    summarize_value_changes,
+    validate_processed_parking_data,
+)
+from src.parking_cleanup import apply_verified_capacity_regime_cleanup
 import logging
 from dotenv import load_dotenv
 import zipfile
@@ -24,7 +37,12 @@ def parse_arguments():
     valid_args = {
         "PARKING": lambda: process_parked_cars(apply_anomaly_detection=True),
         "PARKING_NO_ANOMALY": lambda: process_parked_cars(
-            apply_anomaly_detection=False
+            apply_anomaly_detection=False,
+            output_file="data/processed/data_parking_no_anomaly.csv",
+            anomaly_report_file=(
+                "data/processed/data_parking_no_anomaly_report.json"
+            ),
+            write_zip=False,
         ),
         "PERMITS": process_permits,
         "SPACES": process_spaces,
@@ -38,7 +56,14 @@ def parse_arguments():
             process_permits_from_buildings(),
         ],
         "ALL_NO_ANOMALY": lambda: [  # Allows skipping anomaly detection for the parking part when running ALL
-            process_parked_cars(apply_anomaly_detection=False),
+            process_parked_cars(
+                apply_anomaly_detection=False,
+                output_file="data/processed/data_parking_no_anomaly.csv",
+                anomaly_report_file=(
+                    "data/processed/data_parking_no_anomaly_report.json"
+                ),
+                write_zip=False,
+            ),
             process_permits(),
             process_spaces(),
             process_permits_and_spaces(),
@@ -139,7 +164,13 @@ def process_json_data(data):
     return areas
 
 
-def process_parked_cars(apply_anomaly_detection: bool = True):
+def process_parked_cars(
+    apply_anomaly_detection: bool = True,
+    *,
+    output_file: str | Path | None = None,
+    anomaly_report_file: str | Path | None = None,
+    write_zip: bool = True,
+):
     def enrich_dataframe(df, file, zones_to_areas_df):
         # parse time period code
         time_period = {
@@ -198,26 +229,6 @@ def process_parked_cars(apply_anomaly_detection: bool = True):
         logging.info("Renaming columns...")
         df.rename(columns=new_column_names, inplace=True)
 
-        logging.info("Calculating derived columns...")
-        # calculate navstevnici: navstevnici_platici + navstevnici_neplatici
-        df["navstevnici"] = (
-            df["navstevnici_platici"] + df["navstevnici_neplatici"] + df["prenosna"]
-        )
-
-        # calculate sum of all types - RT_R + RT_V + RT_A + RT_P + RT_C + RT_E + RT_O + RT_S + R_VIS + NR + Free
-        df["soucet_vsech_typu"] = (
-            df["rezidentska"]
-            + df["vlastnicka"]
-            + df["abonentska"]
-            + df["prenosna"]
-            + df["carsharing"]
-            + df["ekologicka"]
-            + df["ostatni"]
-            + df["socialni"]
-            + df["navstevnici"]
-            + df["volna_mista"]
-        )
-
         logging.info("Processing percentage columns...")
         # divide percentage values by 100
         percent_columns = list(
@@ -271,6 +282,9 @@ def process_parked_cars(apply_anomaly_detection: bool = True):
         # now drop all the _pct columns as we won't need them anymore
         df.drop(columns=percent_columns_with_affix, inplace=True)
 
+        logging.info("Recomputing derived parking measures...")
+        df = recompute_derived_parking_measures(df)
+
         # add leading zero to district
         df["mestska_cast"] = utils.add_leading_zero_to_district(df, "mestska_cast")
 
@@ -313,189 +327,24 @@ def process_parked_cars(apply_anomaly_detection: bool = True):
         return df
 
     def save_to_csv(df, processed_dir):
-        if not os.path.exists(processed_dir):
-            os.makedirs(processed_dir)
-        output_file = os.path.join(processed_dir, "data_parking.csv")
-        df.to_csv(output_file, index=False, encoding="utf-8")
-        logging.info(f"Data saved to: {output_file}")
+        resolved_output = Path(output_file or Path(processed_dir) / "data_parking.csv")
+        resolved_output.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(resolved_output, index=False, encoding="utf-8")
+        logging.info(f"Data saved to: {resolved_output}")
 
         # compress the file with zipfile
+        if not write_zip:
+            return
         try:
             logging.info("Compressing data...")
             with zipfile.ZipFile(
-                output_file + ".zip", "w", zipfile.ZIP_DEFLATED
+                str(resolved_output) + ".zip", "w", zipfile.ZIP_DEFLATED
             ) as zipf:
-                zipf.write(output_file, os.path.basename(output_file))
-            logging.info(f"Data compressed to: {output_file}.zip")
+                zipf.write(resolved_output, resolved_output.name)
+            logging.info(f"Data compressed to: {resolved_output}.zip")
         except Exception as e:
             logging.error(f"Error while compressing the file: {e}")
 
-    def detect_and_smooth_anomalies(
-        df,
-        space_columns=["parkovacich_mist_v_zps", "parkovacich_mist_celkem"],
-        window_size=5,
-        threshold=5.0,
-        max_consecutive=12,
-        epsilon=1e-9,
-    ):
-        df_out = df.copy()  # Create a copy to preserve original order and for returning
-        # Sort by zone and date for correct rolling window calculations.
-        # Processing will happen on this sorted version.
-        df_sorted_for_processing = df.sort_values(["kod_useku", "date"])
-
-        # Inner function to process a series (one column for one zone)
-        # Has access to window_size, threshold, etc., by closure
-        def process_series_for_zone(series_group):
-            # If not enough data points for the window, return the group unchanged
-            if len(series_group) <= window_size:
-                return series_group
-
-            # Calculate rolling median for the series_group
-            rolling_median_group = series_group.rolling(
-                window=window_size, center=True, min_periods=2
-            ).median()
-
-            # Calculate absolute deviations
-            abs_dev_group = (series_group - rolling_median_group).abs()
-
-            # Calculate rolling MAD
-            # This lambda for rolling.apply is a known performance concern but not changed in this refactor.
-            rolling_mad_group = series_group.rolling(
-                window=window_size, center=True, min_periods=2
-            ).apply(lambda x: np.median(np.abs(x - np.median(x))), raw=True)
-
-            # Handle zero or near-zero MAD
-            rolling_mad_group = rolling_mad_group.fillna(0) + epsilon
-
-            # Identify anomalies
-            anomalies_group = abs_dev_group > (threshold * rolling_mad_group)
-
-            # Handle consecutive anomalies
-            consecutive_sum_group = anomalies_group.rolling(
-                window=max_consecutive,
-                center=True,
-                min_periods=1,  # min_periods=1 for sum of booleans
-            ).sum()
-            long_run_mask_group = consecutive_sum_group >= max_consecutive
-            anomalies_group[long_run_mask_group] = (
-                False  # Modify boolean Series in place
-            )
-
-            # Replace anomalies
-            series_group_copy = (
-                series_group.copy()
-            )  # Copy the series to modify and return
-            # Replace anomalous values with the calculated rolling median
-            # If rolling_median_group is NaN at an anomaly, NaN will be assigned.
-            series_group_copy.loc[anomalies_group] = rolling_median_group[
-                anomalies_group
-            ]
-
-            return series_group_copy
-
-        # Process each specified column
-        for column in space_columns:
-            logging.info(f"Processing column: {column} using groupby.transform")
-
-            # Apply the transformation.
-            # groupby('kod_useku') groups the sorted DataFrame.
-            # [column] selects the specific column for transformation.
-            # transform(process_series_for_zone) applies the function to each group (zone's data for the column).
-            # The result (transformed_column) will have an index aligned with df_sorted_for_processing.
-            transformed_column = df_sorted_for_processing.groupby(
-                "kod_useku",
-                group_keys=False,  # group_keys=False is good practice with transform
-            )[column].transform(process_series_for_zone)
-
-            # Assign the processed column back to df_out.
-            # Pandas aligns on index, so values go to the correct rows in df_out,
-            # preserving the original DataFrame's order.
-            df_out[column] = transformed_column
-
-        # --- Smoothing Impact Report ---
-        logging.info("--- Smoothing Impact Report ---")
-        for column_to_report in (
-            space_columns
-        ):  # Iterate using a different variable name to avoid confusion
-            original_series = df[
-                column_to_report
-            ]  # Original data from the input DataFrame
-            smoothed_series = df_out[
-                column_to_report
-            ]  # Smoothed data from the df_out DataFrame
-
-            # Mask for actual changes: True if (values differ AND not (both are NaN))
-            # .eq handles NaNs such that NaN.eq(NaN) is True.
-            actual_changes_mask = ~(
-                (original_series.eq(smoothed_series))
-                | (original_series.isna() & smoothed_series.isna())
-            )
-            num_changed = actual_changes_mask.sum()
-
-            if num_changed > 0:
-                # Value-to-value changes
-                value_to_value_changes_mask = (
-                    actual_changes_mask
-                    & original_series.notna()
-                    & smoothed_series.notna()
-                )
-                num_value_to_value_changed = value_to_value_changes_mask.sum()
-
-                sum_abs_diff_val_to_val = 0
-                avg_abs_diff_val_to_val = 0
-                if num_value_to_value_changed > 0:
-                    sum_abs_diff_val_to_val = (
-                        (
-                            original_series[value_to_value_changes_mask]
-                            - smoothed_series[value_to_value_changes_mask]
-                        )
-                        .abs()
-                        .sum()
-                    )
-                    avg_abs_diff_val_to_val = (
-                        sum_abs_diff_val_to_val / num_value_to_value_changed
-                    )
-
-                # Values that became NaN
-                value_became_nan_mask = (
-                    actual_changes_mask
-                    & original_series.notna()
-                    & smoothed_series.isna()
-                )
-                num_became_nan = value_became_nan_mask.sum()
-
-                # NaNs that became values
-                nan_became_value_mask = (
-                    actual_changes_mask
-                    & original_series.isna()
-                    & smoothed_series.notna()
-                )
-                num_became_value = nan_became_value_mask.sum()
-
-                log_message_parts = [
-                    f"Column '{column_to_report}': {num_changed} total points changed by smoothing."
-                ]
-                if num_value_to_value_changed > 0:
-                    log_message_parts.append(
-                        f"  - {num_value_to_value_changed} value-to-value changes: Sum abs diff = {sum_abs_diff_val_to_val:.2f}, Avg abs diff = {avg_abs_diff_val_to_val:.2f}"
-                    )
-                if num_became_nan > 0:
-                    log_message_parts.append(f"  - {num_became_nan} values became NaN.")
-                if num_became_value > 0:
-                    log_message_parts.append(
-                        f"  - {num_became_value} NaNs became values."
-                    )
-
-                logging.info("\\n".join(log_message_parts))
-
-            else:
-                logging.info(
-                    f"Column '{column_to_report}': No points were changed by smoothing."
-                )
-        logging.info("--- End of Smoothing Impact Report ---")
-        # --- End of Report ---
-
-        return df_out
 
     ####################################################
     # main part of the parked cars processing function #
@@ -523,6 +372,7 @@ def process_parked_cars(apply_anomaly_detection: bool = True):
     # make CODE column uppercase, we'll be using it to merge the dfs
     if "CODE" not in zones_to_areas_df.columns:
         zones_to_areas_df.rename(columns={"code": "CODE"}, inplace=True)
+    zones_to_areas_df["CODE"] = zones_to_areas_df["CODE"].str.upper()
 
     # Processing
 
@@ -566,10 +416,6 @@ def process_parked_cars(apply_anomaly_detection: bool = True):
             )
         )
 
-        # Merge with zones_to_areas_df all at once
-        logging.info("Merging with zones_to_areas_df...")
-        parked_cars_all_df = parked_cars_all_df.merge(zones_to_areas_df, on="CODE")
-
         # Add dates all at once
         logging.info("Adding dates...")
         # Extract YYYYMM using string operations
@@ -579,14 +425,140 @@ def process_parked_cars(apply_anomaly_detection: bool = True):
             year_month + "01", format="%Y%m%d"
         ) + pd.offsets.MonthEnd(0)
 
-        logging.info("Cleaning temporary capacity regimes...")
-        parked_cars_all_df = apply_temporary_capacity_regime_cleanup(
-            parked_cars_all_df,
-            code_col="CODE",
-            date_col="date",
-            capacity_cols=["PS_ZPS", "CELKEM_PS"],
+        logging.info("Normalizing source observations...")
+        parked_cars_all_df, normalization_report = normalize_parking_observations(
+            parked_cars_all_df
         )
 
+        logging.info("Merging with zones_to_areas_df...")
+        zones_to_areas_df = zones_to_areas_df.drop_duplicates()
+        if zones_to_areas_df.duplicated("CODE").any():
+            duplicate_codes = zones_to_areas_df.loc[
+                zones_to_areas_df.duplicated("CODE", keep=False), "CODE"
+            ].unique()
+            raise ValueError(
+                "Zone-to-area mapping is not unique for: "
+                + ", ".join(sorted(duplicate_codes[:20]))
+            )
+        parked_cars_all_df = parked_cars_all_df.merge(
+            zones_to_areas_df,
+            on="CODE",
+            how="left",
+            validate="many_to_one",
+            indicator="_zone_area_merge",
+        )
+        missing_zone_area = parked_cars_all_df["_zone_area_merge"].eq("left_only")
+        missing_zone_area_codes = sorted(
+            parked_cars_all_df.loc[missing_zone_area, "CODE"].unique().tolist()
+        )
+        inferred_district = (
+            parked_cars_all_df["CODE"]
+            .str.extract(r"^P0*(\d+)", expand=False)
+            .astype("Int64")
+            .map(lambda value: f"P{int(value):02d}" if pd.notna(value) else None)
+        )
+        parked_cars_all_df["mestska_cast"] = parked_cars_all_df[
+            "mestska_cast"
+        ].fillna(inferred_district)
+        parked_cars_all_df["kod_zsj"] = parked_cars_all_df["kod_zsj"].fillna(
+            "UNMAPPED-" + parked_cars_all_df["CODE"]
+        )
+        parked_cars_all_df["naz_zsj"] = parked_cars_all_df["naz_zsj"].fillna(
+            "Nezařazený úsek " + parked_cars_all_df["CODE"]
+        )
+        parked_cars_all_df.drop(columns="_zone_area_merge", inplace=True)
+
+        raw_parking_observations = parked_cars_all_df.copy()
+        occupancy_detection_config = AnomalyDetectionConfig(
+            minimum_absolute_deviation=25.0
+        )
+        composition_detection_config = AnomalyDetectionConfig(
+            minimum_absolute_deviation=20.0
+        )
+        if apply_anomaly_detection:
+            logging.info("Auditing raw monthly observations...")
+            observation_candidates = detect_monthly_anomaly_candidates(
+                raw_parking_observations,
+                value_columns=[*RAW_OCCUPANCY_COLUMNS, *RAW_COMPOSITION_COLUMNS],
+                config=composition_detection_config,
+            )
+            occupancy_candidate = observation_candidates["column"].isin(
+                RAW_OCCUPANCY_COLUMNS
+            )
+            observation_candidates.loc[occupancy_candidate, "threshold"] = (
+                observation_candidates.loc[occupancy_candidate, "threshold"].clip(
+                    lower=occupancy_detection_config.minimum_absolute_deviation
+                )
+            )
+            observation_candidates = observation_candidates.loc[
+                observation_candidates["absolute_deviation"].gt(
+                    observation_candidates["threshold"]
+                )
+            ].reset_index(drop=True)
+
+            logging.info("Correcting verified temporary capacity regimes...")
+            parked_cars_all_df, verified_regimes = (
+                apply_verified_capacity_regime_cleanup(
+                    parked_cars_all_df,
+                    code_col="CODE",
+                    date_col="date",
+                    zps_capacity_col="PS_ZPS",
+                    total_capacity_col="CELKEM_PS",
+                    occupancy_col="Obs",
+                    occupancy_scale=100.0,
+                    category_col="CATEGORY",
+                )
+            )
+            hierarchy_issues = (
+                parked_cars_all_df["PS_ZPS"].notna()
+                & parked_cars_all_df["CELKEM_PS"].notna()
+                & parked_cars_all_df["PS_ZPS"].gt(
+                    parked_cars_all_df["CELKEM_PS"]
+                )
+            )
+            regime_records = []
+            for regime in verified_regimes:
+                record = asdict(regime)
+                record["start_date"] = regime.start_date.date().isoformat()
+                record["end_date"] = regime.end_date.date().isoformat()
+                record["confirmed_at"] = regime.confirmed_at.date().isoformat()
+                regime_records.append(record)
+            capacity_corrections = {
+                "mode": "verified paired regimes only",
+                "verified_regimes": regime_records,
+                "hierarchy_issues_reported": int(hierarchy_issues.sum()),
+                "changes": summarize_value_changes(
+                    raw_parking_observations,
+                    parked_cars_all_df,
+                    value_columns=["PS_ZPS", "CELKEM_PS", "Obs"],
+                    key_columns=["CODE", "date", "cast_dne"],
+                ),
+            }
+        else:
+            logging.info("Skipping anomaly audit and capacity corrections.")
+            observation_candidates = pd.DataFrame()
+            capacity_corrections = {
+                "mode": "disabled",
+                "verified_regimes": [],
+                "changes": {},
+            }
+
+        anomaly_audit = build_anomaly_audit(
+            raw_parking_observations,
+            observation_candidates,
+            configs={
+                "occupancy_and_respect": occupancy_detection_config,
+                "composition_shares": composition_detection_config,
+            },
+            capacity_corrections=capacity_corrections,
+            group_columns=("CODE", "cast_dne"),
+        )
+        anomaly_audit["source_normalization"] = asdict(normalization_report)
+        anomaly_audit["zone_area_mapping"] = {
+            "unmapped_rows_retained": int(missing_zone_area.sum()),
+            "unmapped_zone_count": len(missing_zone_area_codes),
+            "unmapped_zone_examples": missing_zone_area_codes[:100],
+        }
         # rename columns to more readable names
         logging.info("Renaming columns...")
         parked_cars_all_df = rename_and_calculate_columns(parked_cars_all_df)
@@ -594,30 +566,32 @@ def process_parked_cars(apply_anomaly_detection: bool = True):
     # sort by date and oblast
     parked_cars_all_df.sort_values(["kod_useku", "date", "cast_dne"], inplace=True)
 
-    # detect and smooth anomalies if the flag is set
     if apply_anomaly_detection:
-        logging.info("Applying anomaly detection and smoothing...")
-        # Define the list of columns to apply smoothing to
-        columns_to_smooth = [
-            "parkovacich_mist_v_zps",
-            "parkovacich_mist_celkem",  # Original space capacity columns
-            "rezidentska",
-            "vlastnicka",
-            "abonentska",
-            "prenosna",  # Car types/statuses
-            "carsharing",
-            "ekologicka",
-            "ostatni",
-            "socialni",  # More car types/statuses
-            "navstevnici_platici",
-            "navstevnici_neplatici",  # Visitor types
-            "volna_mista",  # Free spots
-        ]
-        parked_cars_all_df = detect_and_smooth_anomalies(
-            parked_cars_all_df, space_columns=columns_to_smooth
+        logging.info("Validating processed parking data...")
+        anomaly_audit["quality_gates"] = validate_processed_parking_data(
+            parked_cars_all_df
         )
     else:
-        logging.info("Skipping anomaly detection and smoothing.")
+        anomaly_audit["quality_gates"] = {"status": "not enforced"}
+    anomaly_audit["quality_policy"] = {
+        "fatal": [
+            "duplicate_logical_rows",
+            "capacity_conflict_groups",
+            "visitor_identity_mismatches",
+            "total_identity_mismatches",
+        ],
+        "reported_only": ["zps_above_total_rows"],
+    }
+    resolved_report = Path(
+        anomaly_report_file
+        or Path(processed_dir) / "data_parking_anomaly_report.json"
+    )
+    resolved_report.parent.mkdir(parents=True, exist_ok=True)
+    resolved_report.write_text(
+        json.dumps(anomaly_audit, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    logging.info("Anomaly audit saved to: %s", resolved_report)
 
     # export to CSV
     logging.info("Saving CSV...")

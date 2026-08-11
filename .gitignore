@@ -1,6 +1,9 @@
 .vscode
 data/downloaded/buildings
 data/processed/data_parking.csv
+data/processed/data_parking_anomaly_report.json
+data/processed/data_parking_no_anomaly.csv
+data/processed/data_parking_no_anomaly_report.json
 .ignore*
 
 # Byte-compiled / optimized / DLL files
