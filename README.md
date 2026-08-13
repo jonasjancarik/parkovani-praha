@@ -297,6 +297,9 @@ Pro kontrolní export bez korekcí lze použít `parking_no_anomaly`. Zapíše h
 režim záměrně nevynucuje produkční kvalitativní brány a nemá se publikovat jako
 hlavní dataset.
 
+Otevřené datové problémy, blokátory publikace a doporučený cíl další práce
+shrnuje [předání k datové kvalitě](docs/parking-data-quality-handoff.md).
+
 Navíc je možné zpracovat následující podkladové soubory, které nespadají pod `all`:
 
 - `useky_na_zsj` - mapování úseků na základní sídelní jednotky
