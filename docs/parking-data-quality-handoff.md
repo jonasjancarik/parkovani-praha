@@ -148,9 +148,37 @@ přiřazení budova → aktivní parkovací úsek, z něj sestavit oprávnění 
 bez výjimek projít kontrolou celého finálního spojení. Teprve potom společně
 publikovat vyčištěná parkovací data a přepočtená oprávnění.
 
+### Historický dry run a návrh manifestu jsou implementované, schválení stále chybí
+
+Příkaz `audit-history` nyní projde všechny dostupné měsíční exporty budov a pro
+každý měsíc s parkovacími daty vytvoří mapování pouze na tehdy aktivní úseky.
+Každý řádek mapování uchovává použitou metodu (`polygon_intersection` nebo
+`nearest_active_zone`), vzdálenost, zdrojový měsíc souřadnice, příznak náhradní
+souřadnice, prostorovou remízu a změnu proti bezprostředně předchozímu měsíci.
+Algoritmus nejprve vybere průnik bodu s polygonem; nejbližší aktivní úsek používá
+jen jako výslovně označený fallback. Remízu řeší deterministicky podle kódu
+úseku, ale tím ji automaticky neschvaluje.
+
+Dry run současně vytváří návrh verzovaného JSON manifestu a jeho soubor
+`.sha256`. Manifest obsahuje SHA-256 všech použitých vstupů a kandidátů,
+měsíční součty, pokrytí, metody, vzdálenosti, remízy, náhradní souřadnice a změny
+mapování. Čtyři chybějící měsíce zůstávají strojově uvedené jako neauditované;
+`release_decision.ready` je proto vždy `false` a manifest má stav
+`draft_review_required`. Implementace záměrně neumí návrh sama povýšit na
+produkční release bez schválené politiky pokrytí a prostorových výjimek.
+
+Úplný dry run nad současnými vstupy prošel strukturálně ve všech 83 měsících,
+které mají parkovací data: vytvořil 2 883 733 přiřazení budova–měsíc a 364 413
+řádků úsek–měsíc, přesně zachoval měsíční součty, nevytvořil žádný neaktivní cíl
+ani duplicitní klíč. Současně potvrdil čtyři očekávané mezery v pokrytí. Pro
+prostorovou revizi eviduje 767 877 použití nejbližšího úseku, 4 218 remíz, 224
+použití starší souřadnice a 138 905 přiřazení vzdálených přes 1 km. Tyto
+historické počty jsou počty měsíčních přiřazení, nikoli unikátních budov, a
+ukazují, že kontrolu nelze omezit jen na červen 2026.
+
 ### Navržené pořadí práce
 
-1. **Rozšířit měsíční audit na celou historii.** Pro každý měsíc použít tehdejší
+1. **Rozšířit měsíční audit na celou historii — implementováno jako dry run.** Pro každý měsíc použít tehdejší
    souřadnice budov a aktivní geometrie úseků. Průnik s polygonem má přednost;
    nejbližší úsek je pouze označený fallback. Výsledek musí obsahovat metodu,
    vzdálenost, použití starší souřadnice a případnou remízu.
@@ -206,6 +234,7 @@ publikovat vyčištěná parkovací data a přepočtená oprávnění.
 uv run python -m src.permit_zone_mapping audit \
   --month 202606 \
   --candidate-output /tmp/parkovani-permits-202606-candidate.csv \
+  --mapping-output /tmp/parkovani-permits-202606-mapping.csv \
   --report-output /tmp/parkovani-permit-zone-202606-report.json \
   --dry-run \
   --strict
@@ -213,6 +242,23 @@ uv run python -m src.permit_zone_mapping audit \
 
 Dočasné kandidáty v `/tmp` nejsou release artefakty ani trvalý auditní záznam.
 Schválený workflow musí manifest a jeho hash uložit společně s výslednou sadou.
+Návrh pro celou historii vznikne takto:
+
+```bash
+uv run python -m src.permit_zone_mapping audit-history \
+  --candidate-output /tmp/parkovani-permits-history-candidate.csv \
+  --mapping-output /tmp/parkovani-permits-history-mapping.csv \
+  --manifest-output /tmp/parkovani-permits-history-manifest.json \
+  --dry-run
+```
+
+Vedle manifestu vznikne
+`/tmp/parkovani-permits-history-manifest.json.sha256`. Příkaz lze omezit pomocí
+`--start-month` a `--end-month`. Volba `--strict` navíc vrátí nenulový stav,
+dokud některý zdrojový měsíc nemá parkovací data nebo neprojde jiná strukturální
+brána; při současných vstupech je tedy její selhání očekávané a kandidát se
+nesmí publikovat.
+
 Po implementaci celého cíle má závěrečná kontrola zahrnout minimálně:
 
 ```bash

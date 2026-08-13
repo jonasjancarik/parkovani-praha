@@ -321,12 +321,29 @@ součty všech typů oprávnění, náhradní souřadnice, remízy i vzdálenost
 uv run python -m src.permit_zone_mapping audit \
   --month 202606 \
   --candidate-output /tmp/parkovani-permits-202606-candidate.csv \
+  --mapping-output /tmp/parkovani-permits-202606-mapping.csv \
   --report-output /tmp/parkovani-permit-zone-202606-report.json \
   --dry-run --strict
 ```
 
 Kandidátní data nepropagujte, dokud nejsou zkontrolované scénáře vzdáleností a
 změny proti stávajícímu mapování.
+
+Pro audit celé dostupné historie a návrh release manifestu použijte:
+
+```bash
+uv run python -m src.permit_zone_mapping audit-history \
+  --candidate-output /tmp/parkovani-permits-history-candidate.csv \
+  --mapping-output /tmp/parkovani-permits-history-mapping.csv \
+  --manifest-output /tmp/parkovani-permits-history-manifest.json \
+  --dry-run
+```
+
+Výstupní mapování obsahuje metodu a vzdálenost každého přiřazení, prostorové
+remízy, zdroj náhradních souřadnic a změny proti předchozímu měsíci. Manifest
+obsahuje hash vstupů a kandidátů i strojově čitelné mezery v pokrytí. Zůstává
+návrhem a není určený k publikaci, dokud nejsou schválené prostorové výjimky a
+postup pro měsíce bez parkovacích dat.
 
 `join.py` navíc záměrně odmítne duplicitní klíče nebo oprávnění přiřazená k
 úseku, který v daném měsíci není v parkovacích datech. Chybu mapování je nutné
