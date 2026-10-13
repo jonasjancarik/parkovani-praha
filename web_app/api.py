@@ -22,6 +22,7 @@ from address_report import (  # noqa: E402
     point_label,
     search_address,
 )
+from city_overview import build_city_overview  # noqa: E402
 from data import load_parking_data  # noqa: E402
 from explorer_analytics import build_overview_analytics  # noqa: E402
 from explorer_data import build_explorer_payload, make_filters  # noqa: E402
@@ -78,6 +79,16 @@ def explorer(
 ) -> dict:
     filters = make_filters(start, end, cast_dne, district, zone_type)
     return explorer_payload(filters)
+
+
+@lru_cache(maxsize=1)
+def city_overview_payload() -> dict:
+    return build_city_overview(parking_data())
+
+
+@app.get("/api/overview")
+def city_overview() -> dict:
+    return city_overview_payload()
 
 
 @lru_cache(maxsize=1)
