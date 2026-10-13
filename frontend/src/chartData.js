@@ -49,3 +49,47 @@ export function hasDrawableObservationAverage(rows, key, windowSize = 12) {
     Number.isFinite(value) && Number.isFinite(trend[index - 1]?.[1])
   ));
 }
+
+const monthFormat = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric", timeZone: "UTC" });
+
+export function formatMonth(value) {
+  if (value == null || value === "") return "—";
+  const date = typeof value === "string" ? new Date(`${value.slice(0, 7)}-01T00:00:00Z`) : new Date(value);
+  return monthFormat.format(date);
+}
+
+export function monthsBetween(min, max) {
+  if (!min || !max) return [];
+  const months = [];
+  for (let index = monthIndex(min); index <= monthIndex(max); index += 1) {
+    months.push(monthEndFromIndex(index).slice(0, 7));
+  }
+  return months;
+}
+
+export function niceAxisMax(value) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((candidate) => candidate * magnitude >= value);
+  return step * magnitude;
+}
+
+// Moves labels apart vertically so that neighbours keep at least `gap` pixels
+// between their centres and none ends up below `limit`.
+export function spreadLabels(positions, gap, limit) {
+  const sorted = positions
+    .map((position, index) => ({ position, index }))
+    .filter((item) => Number.isFinite(item.position))
+    .sort((a, b) => a.position - b.position);
+  const placed = [];
+  sorted.forEach((item, order) => {
+    placed.push(order === 0 ? item.position : Math.max(item.position, placed[order - 1] + gap));
+  });
+  for (let order = placed.length - 1; order >= 0; order -= 1) {
+    const ceiling = order === placed.length - 1 ? limit : placed[order + 1] - gap;
+    placed[order] = Math.min(placed[order], ceiling);
+  }
+  const result = positions.map(() => null);
+  sorted.forEach((item, order) => { result[item.index] = placed[order]; });
+  return result;
+}

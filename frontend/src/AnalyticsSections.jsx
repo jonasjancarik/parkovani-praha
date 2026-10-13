@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { EChart } from "./EChart.jsx";
-import { materializeMonthlyRows } from "./chartData.js";
+import { formatMonth, materializeMonthlyRows } from "./chartData.js";
 
 const COLORS = ["#e33b32", "#114f50", "#667386", "#9a684f", "#8a866c", "#b48b87"];
 const ZONE_LABELS = { MIX: "Smíšená", OST: "Ostatní", RES: "Rezidentní", VIS: "Návštěvnická" };
@@ -12,15 +12,15 @@ const scalarValue = (value) => Array.isArray(value) ? value.at(-1) : value;
 const formatNumber = (value) => scalarValue(value) == null ? "—" : numberFormat.format(scalarValue(value));
 const formatRatio = (value) => scalarValue(value) == null ? "—" : ratioFormat.format(scalarValue(value));
 
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(media.matches);
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
-  }, []);
-  return reduced;
+  }, [query]);
+  return matches;
 }
 
 function motionOption(option, reduceMotion) {
@@ -28,7 +28,9 @@ function motionOption(option, reduceMotion) {
 }
 const percentFormat = new Intl.NumberFormat("cs-CZ", { style: "percent", maximumFractionDigits: 0 });
 
-const axisText = { color: "#77736a", fontFamily: "Inter, sans-serif", fontSize: 10 };
+const axisText = { color: "#77736a", fontFamily: "Inter, sans-serif", fontSize: 11 };
+const legendText = { color: "#4f4c45", fontFamily: "Inter, sans-serif", fontSize: 11 };
+const monthPointer = { label: { formatter: ({ value }) => formatMonth(value) } };
 const splitLine = { lineStyle: { color: "#e4dfd5", type: "dashed" } };
 
 function lineGradient(color, faded) {
@@ -82,7 +84,7 @@ function compactSeries(rows, limit = 5) {
   return [...merged.values()];
 }
 
-function timeSeriesOption(rows, { stacked = true } = {}) {
+function timeSeriesOption(rows, { stacked = true, seriesLabels = {} } = {}) {
   const compactRows = compactSeries(rows);
   const dates = [...new Set(compactRows.map((row) => row.date))].sort();
   const calendarDates = materializeMonthlyRows(
@@ -100,7 +102,8 @@ function timeSeriesOption(rows, { stacked = true } = {}) {
       left: 0,
       itemWidth: 16,
       itemHeight: 3,
-      textStyle: { ...axisText, fontSize: 9 },
+      formatter: (name) => seriesLabels[name] ?? name,
+      textStyle: legendText,
     },
     tooltip: {
       trigger: "axis",
@@ -114,7 +117,8 @@ function timeSeriesOption(rows, { stacked = true } = {}) {
       boundaryGap: false,
       axisLine: { lineStyle: { color: "#aaa59a" } },
       axisTick: { show: false },
-      axisLabel: { ...axisText, formatter: (value) => new Date(value).getFullYear(), hideOverlap: true },
+      axisLabel: { ...axisText, formatter: "{yyyy}", hideOverlap: true },
+      axisPointer: monthPointer,
     },
     yAxis: {
       type: "value",
@@ -174,6 +178,7 @@ function TrendBreakdown({ analytics, reduceMotion }) {
   const configuration = {
     spaces: {
       rows: analytics.spaces_by_zone,
+      seriesLabels: ZONE_LABELS,
       title: "Kapacita podle typu zóny",
       subtitle: "Vývoj počtu parkovacích míst v regulovaných zónách",
     },
@@ -189,8 +194,11 @@ function TrendBreakdown({ analytics, reduceMotion }) {
     },
   }[mode];
   const option = useMemo(
-    () => motionOption(timeSeriesOption(configuration.rows), reduceMotion),
-    [configuration.rows, reduceMotion],
+    () => motionOption(
+      timeSeriesOption(configuration.rows, { seriesLabels: configuration.seriesLabels }),
+      reduceMotion,
+    ),
+    [configuration.rows, configuration.seriesLabels, reduceMotion],
   );
   return (
     <section className="analysis-section trend-breakdown">
@@ -234,7 +242,7 @@ function zoneMixOption(rows) {
         formatter: percentFormat.format(row.share),
         color: "#fffdf8",
         fontFamily: "Inter, sans-serif",
-        fontSize: 9,
+        fontSize: 11,
       },
     })),
   };
@@ -248,7 +256,7 @@ function parkerShareOption(rows) {
     animationDuration: 450,
     color: COLORS,
     grid: { left: 70, right: 12, top: 42, bottom: 16 },
-    legend: { top: 0, left: 0, itemWidth: 13, itemHeight: 3, textStyle: { ...axisText, fontSize: 8 } },
+    legend: { top: 0, left: 0, itemWidth: 13, itemHeight: 3, textStyle: legendText },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: (value) => percentFormat.format(value) },
     xAxis: { type: "value", max: 1, axisLabel: { ...axisText, formatter: (value) => percentFormat.format(value) }, splitLine },
     yAxis: { type: "category", data: districts.map(districtLabel), axisTick: { show: false }, axisLine: { show: false }, axisLabel: axisText },
@@ -383,7 +391,7 @@ function ChangeSection({ analytics, reduceMotion }) {
   );
 }
 
-function zsjPressureOption(rows) {
+function zsjPressureOption(rows, compact = false) {
   const dates = [...new Set(rows.map((row) => row.date))].sort();
   const calendarDates = materializeMonthlyRows(
     dates.map((date) => ({ date, present: true })),
@@ -394,10 +402,10 @@ function zsjPressureOption(rows) {
   return {
     animationDuration: 450,
     color: COLORS,
-    grid: { left: 48, right: 18, top: 48, bottom: 38 },
-    legend: { top: 0, left: 0, itemWidth: 15, itemHeight: 3, textStyle: { ...axisText, fontSize: 8 } },
+    grid: { left: 48, right: 18, top: compact ? 84 : 62, bottom: 38 },
+    legend: { top: 0, left: 0, itemWidth: 15, itemHeight: 3, textStyle: legendText },
     tooltip: { trigger: "axis", valueFormatter: formatRatio },
-    xAxis: { type: "time", boundaryGap: false, axisLabel: { ...axisText, formatter: (value) => new Date(value).getFullYear(), hideOverlap: true }, axisTick: { show: false }, axisLine: { lineStyle: { color: "#aaa59a" } } },
+    xAxis: { type: "time", boundaryGap: false, axisLabel: { ...axisText, formatter: "{yyyy}", hideOverlap: true }, axisPointer: monthPointer, axisTick: { show: false }, axisLine: { lineStyle: { color: "#aaa59a" } } },
     yAxis: { type: "value", axisLabel: { ...axisText, formatter: (value) => ratioFormat.format(value) }, splitLine },
     series: names.map((name, index) => ({
       name,
@@ -422,9 +430,9 @@ function forecastOption(rows, district) {
     animationDuration: 450,
     color: ["#114f50", "#e33b32"],
     grid: { left: 48, right: 18, top: 30, bottom: 38 },
-    legend: { top: 0, left: 0, itemWidth: 16, itemHeight: 3, textStyle: { ...axisText, fontSize: 9 } },
+    legend: { top: 0, left: 0, itemWidth: 16, itemHeight: 3, textStyle: legendText },
     tooltip: { trigger: "axis", valueFormatter: formatRatio },
-    xAxis: { type: "time", axisLabel: { ...axisText, formatter: "{yyyy}" }, axisLine: { lineStyle: { color: "#aaa59a" } }, splitLine: { show: false } },
+    xAxis: { type: "time", axisLabel: { ...axisText, formatter: "{yyyy}" }, axisPointer: monthPointer, axisLine: { lineStyle: { color: "#aaa59a" } }, splitLine: { show: false } },
     yAxis: { type: "value", axisLabel: { ...axisText, formatter: (value) => ratioFormat.format(value) }, splitLine },
     series: [
       {
@@ -448,6 +456,7 @@ function forecastOption(rows, district) {
 }
 
 function PressureAndForecast({ analytics, reduceMotion }) {
+  const compact = useMediaQuery("(max-width: 760px)");
   const districts = useMemo(
     () => [...new Set(analytics.forecast.map((row) => row.district))].sort(),
     [analytics.forecast],
@@ -455,8 +464,8 @@ function PressureAndForecast({ analytics, reduceMotion }) {
   const [selectedDistrict, setSelectedDistrict] = useState(districts[0] ?? "");
   const district = districts.includes(selectedDistrict) ? selectedDistrict : (districts[0] ?? "");
   const pressureOption = useMemo(
-    () => motionOption(zsjPressureOption(analytics.zsj_pressure), reduceMotion),
-    [analytics.zsj_pressure, reduceMotion],
+    () => motionOption(zsjPressureOption(analytics.zsj_pressure, compact), reduceMotion),
+    [analytics.zsj_pressure, compact, reduceMotion],
   );
   const forecastChart = useMemo(
     () => motionOption(forecastOption(analytics.forecast, district), reduceMotion),
@@ -487,7 +496,7 @@ function PressureAndForecast({ analytics, reduceMotion }) {
 }
 
 export function AnalyticsSections({ analytics }) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   if (!analytics) return null;
   return (
     <div className="analytics-sections">

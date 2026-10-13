@@ -20,6 +20,18 @@
 > images during the next visual-fidelity review; the historical measurements below
 > describe the previous search-field layout.
 
+> **Usability pass (2026-10-13):** Year labels on time axes use the ECharts
+> `{yyyy}` template; the previous function formatter returned a number, which
+> ECharts 6.1 rejects and which left the page blank. The period filter is now two
+> month lists with Czech month names instead of `type="month"` inputs (those fall
+> back to a plain text field in Safari and Firefox). Filter menus close on Escape
+> and on a press outside. Line labels at the right end of the main chart are
+> spaced apart and sit between the lines and the right-hand scale; below 1100px
+> the chart switches to a legend. The smallest text is 11px instead of 8–10px,
+> the default selection no longer fills the address with parameters, and
+> "Obnovit" returns to the selection the page opens with. These changes postdate
+> the measurements below.
+
 ## Fidelity review
 
 - Layout and spacing: the masthead, three-column introduction, tabs, filter row, chart canvas, district comparison, and insight rail align with the reference hierarchy and proportions. The filter row and address search remain one continuous 98px band both before and after it becomes sticky.

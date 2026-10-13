@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  formatMonth,
   hasDrawableObservationAverage,
   materializeMonthlyRows,
+  monthsBetween,
+  niceAxisMax,
+  spreadLabels,
   trailingObservationAverage,
 } from "./chartData.js";
 
@@ -70,4 +74,21 @@ test("observation average becomes drawable again after a data gap", () => {
 
   assert.equal(hasDrawableObservationAverage(rows.slice(0, 13), "permits"), false);
   assert.equal(hasDrawableObservationAverage(rows, "permits"), true);
+});
+
+test("month helpers list every month and label it in Czech", () => {
+  assert.deepEqual(monthsBetween("2024-11-30", "2025-02-28"), ["2024-11", "2024-12", "2025-01", "2025-02"]);
+  assert.equal(formatMonth("2025-02-28"), "únor 2025");
+  assert.equal(formatMonth(Date.UTC(2023, 1, 28)), "únor 2023");
+});
+
+test("axis maximum rounds up to a readable value", () => {
+  assert.equal(niceAxisMax(218542), 250000);
+  assert.equal(niceAxisMax(15752), 20000);
+  assert.equal(niceAxisMax(0), 1);
+});
+
+test("overlapping labels are pushed apart without leaving the plot", () => {
+  assert.deepEqual(spreadLabels([100, 105, 20], 40, 300), [100, 140, 20]);
+  assert.deepEqual(spreadLabels([290, 295, null], 40, 300), [260, 300, null]);
 });

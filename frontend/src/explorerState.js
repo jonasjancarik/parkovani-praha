@@ -36,8 +36,30 @@ export function queryFor(filters) {
   return params.toString();
 }
 
+export function sameSelection(first, second) {
+  return first.length === second.length && first.every((value) => second.includes(value));
+}
+
+export function defaultFiltersFor(options) {
+  if (!options) return DEFAULT_FILTERS;
+  return {
+    ...DEFAULT_FILTERS,
+    castDne: DEFAULT_FILTERS.castDne.filter((value) => options.cast_dne.includes(value)),
+    zoneTypes: DEFAULT_FILTERS.zoneTypes.filter((value) => options.zone_types.includes(value)),
+  };
+}
+
 export function stateToSearch(filters, view, metric) {
-  const params = new URLSearchParams(queryFor(filters));
+  const params = new URLSearchParams();
+  if (filters.start) params.set("start", filters.start);
+  if (filters.end) params.set("end", filters.end);
+  if (!sameSelection(filters.castDne, DEFAULT_FILTERS.castDne)) {
+    filters.castDne.forEach((value) => params.append("cast_dne", value));
+  }
+  filters.districts.forEach((value) => params.append("district", value));
+  if (!sameSelection(filters.zoneTypes, DEFAULT_FILTERS.zoneTypes)) {
+    filters.zoneTypes.forEach((value) => params.append("zone_type", value));
+  }
   if (view !== "charts") params.set("view", view);
   if (metric !== "permits-spaces") params.set("metric", metric);
   return params.toString();

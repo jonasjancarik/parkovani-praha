@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_FILTERS,
+  defaultFiltersFor,
   initialStateFromSearch,
   monthEnd,
   monthStart,
@@ -24,6 +26,15 @@ test("shareable state round-trips filters, view, and metric", () => {
     metric: "pressure",
     filters,
   });
+});
+
+test("the default selection keeps the address short", () => {
+  assert.equal(stateToSearch(DEFAULT_FILTERS, "charts", "permits-spaces"), "");
+  assert.deepEqual(initialStateFromSearch("").filters, DEFAULT_FILTERS);
+  assert.deepEqual(
+    defaultFiltersFor({ cast_dne: ["noc", "den"], zone_types: ["RES"] }),
+    { ...DEFAULT_FILTERS, castDne: ["noc"], zoneTypes: ["RES"] },
+  );
 });
 
 test("invalid URL state falls back to the primary view", () => {

@@ -9,8 +9,11 @@ import {
 import { EChart } from "./EChart.jsx";
 import { AnalyticsSections } from "./AnalyticsSections.jsx";
 import {
+  formatMonth,
   hasDrawableObservationAverage,
   materializeMonthlyRows,
+  niceAxisMax,
+  spreadLabels,
   trailingObservationAverage,
 } from "./chartData.js";
 import {
@@ -26,22 +29,29 @@ import {
   NoResultsState,
 } from "./ExplorerStates.jsx";
 import {
-  DEFAULT_FILTERS,
+  defaultFiltersFor,
   initialStateFromSearch,
   monthEnd,
   monthStart,
   queryFor,
-  selectionIsAll,
+  sameSelection,
   stateToSearch,
 } from "./explorerState.js";
 
 const RED = "#e33b32";
 const TEAL = "#114f50";
 const SLATE = "#667386";
+// Plot area of the desktop time chart: the 380px `.time-chart` minus its grid margins.
+const TIME_CHART_GRID = { left: 58, right: 178, top: 38, bottom: 42 };
+// Room between the end of the lines and the right-hand scale, reserved for the line labels.
+const END_LABEL_WIDTH = 136;
+const TIME_CHART_PLOT_HEIGHT = 380 - TIME_CHART_GRID.top - TIME_CHART_GRID.bottom;
+const END_LABEL_HEIGHT = 48;
 const TIME_LABELS = {
   "Po-Pá": "Pracovní dny",
   "Po-Pá (MPD)": "Pracovní dny · měření",
   "So-Ne": "Víkend",
+  den: "Den",
   noc: "Noc",
 };
 const ZONE_LABELS = {
@@ -132,6 +142,35 @@ function useMediaQuery(query) {
   return matches;
 }
 
+function lastValue(rows, key) {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (Number.isFinite(rows[index][key])) return rows[index][key];
+  }
+  return null;
+}
+
+function highestValue(rows, keys) {
+  return rows.reduce((highest, row) => Math.max(
+    highest,
+    ...keys.map((key) => (Number.isFinite(row[key]) ? row[key] : 0)),
+  ), 0);
+}
+
+// Vertical shifts that keep the labels at the right end of the lines from covering each other.
+function endLabelShifts(rows, countMax, ratioMax, keys) {
+  const positions = keys.map((key) => {
+    const value = lastValue(rows, key);
+    if (value == null) return null;
+    const axisMax = key === "permits_per_space" ? ratioMax : countMax;
+    return TIME_CHART_PLOT_HEIGHT * (1 - value / axisMax);
+  });
+  const placed = spreadLabels(positions, END_LABEL_HEIGHT, TIME_CHART_PLOT_HEIGHT);
+  return Object.fromEntries(keys.map((key, index) => [
+    key,
+    placed[index] == null ? 0 : Math.round(placed[index] - positions[index]),
+  ]));
+}
+
 function lineChartOption(
   series,
   compact = false,
@@ -139,11 +178,19 @@ function lineChartOption(
   metric = "permits-spaces",
   showTrend = false,
 ) {
-  const axisText = { color: "#73736f", fontFamily: "Inter, sans-serif", fontSize: 11 };
+  const axisText = { color: "#73736f", fontFamily: "Inter, sans-serif", fontSize: 12 };
   const pointValue = (value) => Array.isArray(value) ? value[1] : value;
   const chartRows = materializeMonthlyRows(
     series,
     ["permits", "spaces", "permits_per_space"],
+  );
+  const countMax = niceAxisMax(highestValue(chartRows, ["permits", "spaces"]));
+  const ratioMax = Math.max(2, Math.ceil(highestValue(chartRows, ["permits_per_space"]) * 2) / 2);
+  const labelShift = endLabelShifts(
+    chartRows,
+    countMax,
+    ratioMax,
+    metric === "pressure" ? ["permits_per_space"] : ["permits", "spaces", "permits_per_space"],
   );
   const common = {
     type: "line",
@@ -167,7 +214,7 @@ function lineChartOption(
     color: [RED, TEAL, SLATE],
     grid: compact
       ? { left: 48, right: 14, top: 58, bottom: 42 }
-      : { left: 58, right: 122, top: 38, bottom: 42 },
+      : TIME_CHART_GRID,
     legend: compact
       ? {
           show: true,
@@ -181,7 +228,7 @@ function lineChartOption(
             "Parkovací místa": "Místa",
             "Oprávnění na místo": "Oprávnění / místo",
           })[name] ?? name,
-          textStyle: { color: "#4f4c45", fontFamily: "Inter, sans-serif", fontSize: 9 },
+          textStyle: { color: "#4f4c45", fontFamily: "Inter, sans-serif", fontSize: 11 },
         }
       : { show: false },
     tooltip: {
@@ -198,14 +245,16 @@ function lineChartOption(
       axisTick: { show: false },
       axisLabel: {
         ...axisText,
-        formatter: (value) => new Date(value).getFullYear(),
+        formatter: "{yyyy}",
         hideOverlap: true,
       },
+      axisPointer: { label: { formatter: ({ value }) => formatMonth(value) } },
     },
     yAxis: [
       {
         type: "value",
         min: 0,
+        max: countMax,
         splitNumber: 4,
         axisLabel: {
           ...axisText,
@@ -216,7 +265,8 @@ function lineChartOption(
       {
         type: "value",
         min: 0,
-        max: (value) => Math.max(2, Math.ceil(value.max * 2) / 2),
+        max: ratioMax,
+        offset: compact ? 0 : END_LABEL_WIDTH,
         splitNumber: 4,
         axisLabel: { ...axisText, formatter: (value) => ratioFormat.format(value) },
         splitLine: { show: false },
@@ -227,7 +277,7 @@ function lineChartOption(
         ...common,
         name: "Parkovací oprávnění",
         data: chartRows.map((row) => [row.date, row.permits]),
-        endLabel: { ...common.endLabel, show: !compact, color: RED },
+        endLabel: { ...common.endLabel, show: !compact, color: RED, offset: [0, labelShift.permits] },
         lineStyle: { color: lineGradient("#ed827b", RED), width: showTrend ? 1.3 : 2.4, opacity: showTrend ? 0.38 : 1 },
         areaStyle: showTrend ? undefined : { color: areaGradient(RED) },
         tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
@@ -236,7 +286,7 @@ function lineChartOption(
         ...common,
         name: "Parkovací místa",
         data: chartRows.map((row) => [row.date, row.spaces]),
-        endLabel: { ...common.endLabel, show: !compact, color: TEAL, offset: [0, 14] },
+        endLabel: { ...common.endLabel, show: !compact, color: TEAL, offset: [0, labelShift.spaces] },
         lineStyle: { color: lineGradient("#799b98", TEAL), width: showTrend ? 1.3 : 2.4, opacity: showTrend ? 0.38 : 1 },
         areaStyle: showTrend ? undefined : { color: areaGradient(TEAL) },
         tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
@@ -250,7 +300,7 @@ function lineChartOption(
           ...common.endLabel,
           show: !compact,
           color: SLATE,
-          offset: [0, -14],
+          offset: [0, labelShift.permits_per_space],
           formatter: (params) => `${params.seriesName}\n${formatRatio(pointValue(params.value))}`,
         },
         lineStyle: { color: lineGradient("#aeb6c0", SLATE), width: showTrend ? 1.1 : 1.8, opacity: showTrend ? 0.38 : 1 },
@@ -288,16 +338,13 @@ function lineChartOption(
     );
   }
   if (metric === "pressure") {
-    option.yAxis = [{ ...option.yAxis[1], position: "left" }];
+    option.yAxis = [{ ...option.yAxis[1], position: "left", offset: 0 }];
     option.series = option.series.reduce((pressureSeries, item) => {
       if (item.name.includes("Oprávnění na místo")) {
         pressureSeries.push({ ...item, yAxisIndex: 0 });
       }
       return pressureSeries;
     }, []);
-    option.grid = compact
-      ? { left: 48, right: 14, top: 58, bottom: 42 }
-      : { left: 58, right: 122, top: 38, bottom: 42 };
   }
   return option;
 }
@@ -311,7 +358,7 @@ function districtChartOption(districts, reduceMotion = false) {
   const values = districts.map((row) => row.permits_per_space);
   return {
     animationDuration: reduceMotion ? 0 : 500,
-    grid: { left: 76, right: 38, top: 24, bottom: 14 },
+    grid: { left: 76, right: 52, top: 24, bottom: 14 },
     xAxis: {
       type: "value",
       position: "top",
@@ -319,7 +366,7 @@ function districtChartOption(districts, reduceMotion = false) {
       max: Math.max(3, ...values.map((value) => Math.ceil(value * 2) / 2)),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: "#77736a", fontFamily: "Inter, sans-serif", fontSize: 11 },
+      axisLabel: { color: "#77736a", fontFamily: "Inter, sans-serif", fontSize: 12 },
       splitLine: { show: false },
     },
     yAxis: {
@@ -362,7 +409,7 @@ function districtChartOption(districts, reduceMotion = false) {
 }
 
 function ChartView({ payload, metric }) {
-  const compactChart = useMediaQuery("(max-width: 760px)");
+  const compactChart = useMediaQuery("(max-width: 1100px)");
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [trendRequested, setTrendRequested] = useState(false);
   const trendAvailable = useMemo(
@@ -391,9 +438,7 @@ function ChartView({ payload, metric }) {
       <section className="chart-section" aria-labelledby="time-heading">
         <div className="section-heading chart-heading">
           <div>
-            <h2 id="time-heading">
-              Vývoj v čase <IconInfoCircle size={15} stroke={1.5} aria-label="Nápověda" />
-            </h2>
+            <h2 id="time-heading">Vývoj v čase</h2>
             <p>{showTrend
               ? "Čárkovaně je průměr z posledních 12 dostupných měření. Přerušení ukazují měsíce bez dat."
               : trendAvailable
@@ -416,7 +461,7 @@ function ChartView({ payload, metric }) {
       <section className="district-section" aria-labelledby="district-heading">
         <div className="section-heading">
           <h2 id="district-heading">Porovnání městských částí</h2>
-          <p>Oprávnění na 1 parkovací místo ({payload.summary?.latest_date.slice(0, 7)})</p>
+          <p>Oprávnění na 1 parkovací místo, {formatMonth(payload.summary?.latest_date)}</p>
         </div>
         <div className="district-content">
           <EChart
@@ -520,13 +565,13 @@ function InsightPanel({ payload, filters }) {
   const summary = payload.summary;
   const districtText = filters.districts.length
     ? filters.districts.map((value) => value.replace(/^P0?/, "Praha ")).join(", ")
-    : "všechny městské části";
+    : "Praha · všechny městské části";
 
   return (
     <aside className="insight-panel">
       <section>
         <h2>Aktuální výběr</h2>
-        <p>Praha · {districtText}</p>
+        <p>{districtText}</p>
         <p>{filters.castDne.map((value) => TIME_LABELS[value] ?? value).join(", ") || "všechny části dne"}</p>
         <p>Typy zón: {filters.zoneTypes.map((value) => ZONE_LABELS[value] ?? value).join(", ") || "všechny"}</p>
         <p className="selection-date">
@@ -593,12 +638,13 @@ export function App() {
       }
     : filters;
   const hasResults = Boolean(payload?.series.length);
+  const defaultFilters = useMemo(() => defaultFiltersFor(payload?.options), [payload?.options]);
   const hasActiveFilters = Boolean(payload) && (
     Boolean(filters.start)
     || Boolean(filters.end)
     || filters.districts.length > 0
-    || !selectionIsAll(filters.castDne, payload.options.cast_dne)
-    || !selectionIsAll(filters.zoneTypes, payload.options.zone_types)
+    || !sameSelection(filters.castDne, defaultFilters.castDne)
+    || !sameSelection(filters.zoneTypes, defaultFilters.zoneTypes)
   );
 
   useEffect(() => {
@@ -640,11 +686,7 @@ export function App() {
     start: current.start && value < current.start ? monthStart(value.slice(0, 7)) : current.start,
     end: value,
   }));
-  const resetFilters = () => setFilters({
-    ...DEFAULT_FILTERS,
-    castDne: payload?.options.cast_dne ?? DEFAULT_FILTERS.castDne,
-    zoneTypes: payload?.options.zone_types ?? DEFAULT_FILTERS.zoneTypes,
-  });
+  const resetFilters = () => setFilters(defaultFilters);
   const shareSelection = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -653,6 +695,12 @@ export function App() {
       setShareStatus("Odkaz se nepodařilo zkopírovat");
     }
   };
+  useEffect(() => {
+    if (!shareStatus) return undefined;
+    const timer = window.setTimeout(() => setShareStatus(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [shareStatus]);
+
   const handleTabKeyDown = (event) => {
     if (!event.key.startsWith("Arrow")) return;
     event.preventDefault();
@@ -747,7 +795,7 @@ export function App() {
           </div>
         )}
 
-        <div className="workspace-grid" aria-busy={loading}>
+        <div className={`workspace-grid${loading && payload ? " is-refreshing" : ""}`} aria-busy={loading}>
           <div className="workspace-main">
             <div
               id="view-panel"

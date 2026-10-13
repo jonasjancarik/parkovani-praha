@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   IconCalendar,
   IconChevronDown,
@@ -6,11 +6,33 @@ import {
   IconShare,
 } from "@tabler/icons-react";
 
+import { formatMonth, monthsBetween } from "./chartData.js";
 import { monthEnd, monthStart } from "./explorerState.js";
 
 
 export function MultiSelect({ label, values, selected, onChange, display }) {
+  const menuRef = useRef(null);
   const selectedValues = useMemo(() => new Set(selected), [selected]);
+
+  useEffect(() => {
+    const closeOnOutsidePress = (event) => {
+      const menu = menuRef.current;
+      if (menu?.open && !menu.contains(event.target)) menu.open = false;
+    };
+    const closeOnEscape = (event) => {
+      const menu = menuRef.current;
+      if (event.key !== "Escape" || !menu?.open) return;
+      const hadFocus = menu.contains(document.activeElement);
+      menu.open = false;
+      if (hadFocus) menu.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
   const toggle = (value) => {
     onChange(
       selectedValues.has(value)
@@ -22,15 +44,15 @@ export function MultiSelect({ label, values, selected, onChange, display }) {
   return (
     <div className="filter-control">
       <span className="filter-label">{label}</span>
-      <details className="multi-select">
+      <details className="multi-select" ref={menuRef}>
         <summary>
           <span className="selection-chips" aria-label={`${label}: ${selected.length ? `${selected.length} vybráno` : "všechny"}`}>
             {selected.length === 0 ? (
               <span className="selection-placeholder">Všechny</span>
-            ) : selected.slice(0, 3).map((value) => (
+            ) : selected.slice(0, 2).map((value) => (
               <span className="chip" key={value}>{display?.(value) ?? value}</span>
             ))}
-            {selected.length > 3 ? <span className="chip-overflow">+{selected.length - 3}</span> : null}
+            {selected.length > 2 ? <span className="chip-overflow">+{selected.length - 2}</span> : null}
           </span>
           <IconChevronDown size={16} stroke={1.8} aria-hidden="true" />
         </summary>
@@ -73,28 +95,33 @@ export function DistrictSelect({ values, selected, onChange }) {
 }
 
 export function DateRange({ start, end, min, max, onStart, onEnd }) {
+  const months = useMemo(() => monthsBetween(min, max), [min, max]);
+  const startMonth = start?.slice(0, 7);
+  const endMonth = end?.slice(0, 7);
   return (
     <div className="filter-control date-control">
-      <span className="filter-label">Období po měsících</span>
+      <span className="filter-label">Období</span>
       <div className="date-fields">
         <IconCalendar size={16} stroke={1.6} aria-hidden="true" />
-        <input
+        <select
           aria-label="Začátek období"
-          type="month"
-          value={start?.slice(0, 7)}
-          min={min?.slice(0, 7)}
-          max={(end || max)?.slice(0, 7)}
+          value={startMonth}
           onChange={(event) => onStart(monthStart(event.target.value))}
-        />
+        >
+          {months.filter((month) => month <= endMonth).map((month) => (
+            <option key={month} value={month}>{formatMonth(month)}</option>
+          ))}
+        </select>
         <span>–</span>
-        <input
+        <select
           aria-label="Konec období"
-          type="month"
-          value={end?.slice(0, 7)}
-          min={(start || min)?.slice(0, 7)}
-          max={max?.slice(0, 7)}
+          value={endMonth}
           onChange={(event) => onEnd(monthEnd(event.target.value))}
-        />
+        >
+          {months.filter((month) => month >= startMonth).map((month) => (
+            <option key={month} value={month}>{formatMonth(month)}</option>
+          ))}
+        </select>
       </div>
     </div>
   );
