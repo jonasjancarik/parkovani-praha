@@ -12,7 +12,7 @@ from shapely.geometry import Point, shape
 from shapely.ops import transform
 from shapely.strtree import STRtree
 
-from config import ZONE_FILE_RE, ZONES_PATH, ZONES_TO_ZSJ_PATH
+from config import ZONE_FILE_RE, ZONES_PATH, ZONES_SNAPSHOT_PATH, ZONES_TO_ZSJ_PATH
 
 WGS84 = "EPSG:4326"
 PRAGUE_METRIC_CRS = "EPSG:5514"
@@ -81,7 +81,17 @@ class ZoneIndex:
         return matches
 
 
-def geocode_with_mapy_cz(query: str) -> Optional[Dict[str, Any]]:
+class GeocodingError(RuntimeError):
+    """Mapy.cz could not be reached or refused the request."""
+
+
+def _error_summary(exc: Exception) -> str:
+    # The request URL carries the API key, so the exception text must not be logged.
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    return f"{type(exc).__name__} (HTTP {status})" if status else type(exc).__name__
+
+
+def geocode_with_mapy_cz(query: str, raise_errors: bool = False) -> Optional[Dict[str, Any]]:
     api_key = os.getenv("MAPY_CZ_API_KEY")
     if not api_key:
         return None
@@ -104,7 +114,9 @@ def geocode_with_mapy_cz(query: str) -> Optional[Dict[str, Any]]:
                 return result
         return None
     except Exception as exc:
-        logging.error("Geocoding failed for '%s': %s", query, exc)
+        logging.error("Geocoding failed for '%s': %s", query, _error_summary(exc))
+        if raise_errors:
+            raise GeocodingError(_error_summary(exc)) from None
         return None
 
 
@@ -136,7 +148,7 @@ def reverse_geocode_with_mapy_cz(lon: float, lat: float) -> Optional[Dict[str, A
             return result
         return None
     except Exception as exc:
-        logging.error("Reverse geocoding failed for '%s,%s': %s", lon, lat, exc)
+        logging.error("Reverse geocoding failed for '%s,%s': %s", lon, lat, _error_summary(exc))
         return None
 
 
@@ -152,49 +164,84 @@ def extract_lon_lat(item: Dict[str, Any]) -> Optional[Tuple[float, float]]:
     return None
 
 
-def load_latest_zone_files() -> Dict[str, str]:
-    latest: Dict[str, Tuple[int, str]] = {}
-    for file_name in os.listdir(ZONES_PATH):
+def load_latest_zone_files() -> Dict[str, List[str]]:
+    """Return every export of the newest month for each district.
+
+    The portal publishes one file per part of the day and each lists only the
+    zones measured in that window, so a single file misses part of the district.
+    """
+    latest: Dict[str, Tuple[int, List[str]]] = {}
+    for file_name in sorted(os.listdir(ZONES_PATH)):
         match = ZONE_FILE_RE.match(file_name)
         if not match:
             continue
         district, yyyymm = match.groups()
         yyyymm_int = int(yyyymm)
+        path = str(ZONES_PATH / file_name)
         if district not in latest or yyyymm_int > latest[district][0]:
-            latest[district] = (yyyymm_int, str(ZONES_PATH / file_name))
-    return {district: path for district, (_, path) in latest.items()}
+            latest[district] = (yyyymm_int, [path])
+        elif yyyymm_int == latest[district][0]:
+            latest[district][1].append(path)
+    return {district: paths for district, (_, paths) in latest.items()}
+
+
+def latest_zone_features() -> List[Dict[str, Any]]:
+    files = load_latest_zone_files()
+    features: Dict[str, Dict[str, Any]] = {}
+    for paths in files.values():
+        for path in paths:
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    data = json.load(handle)
+            except Exception as exc:
+                logging.warning("Skipping %s: %s", path, exc)
+                continue
+
+            for feature in data.get("features", []):
+                code = feature.get("properties", {}).get("CODE")
+                geom = feature.get("geometry")
+                if not code or not geom or code in features:
+                    continue
+                features[code] = {
+                    "type": "Feature",
+                    "properties": {"CODE": code},
+                    "geometry": geom,
+                }
+    return [features[code] for code in sorted(features)]
+
+
+def write_zone_snapshot() -> int:
+    """Save the current zone shapes so the app does not need the raw exports."""
+    features = latest_zone_features()
+    collection = {"type": "FeatureCollection", "features": features}
+    ZONES_SNAPSHOT_PATH.write_text(
+        json.dumps(collection, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    return len(features)
 
 
 def load_zone_index() -> ZoneIndex:
-    files = load_latest_zone_files()
+    if ZONES_SNAPSHOT_PATH.exists():
+        with open(ZONES_SNAPSHOT_PATH, encoding="utf-8") as handle:
+            features = json.load(handle).get("features", [])
+    else:
+        features = latest_zone_features()
+
     zones: Dict[str, Zone] = {}
-    for path in files.values():
+    for feature in features:
+        code = feature["properties"]["CODE"]
         try:
-            with open(path, encoding="utf-8") as handle:
-                data = json.load(handle)
+            geometry = shape(feature["geometry"])
+            zones[code] = Zone(
+                code=code,
+                geometry=geometry,
+                geometry_metric=project_geometry(geometry),
+            )
         except Exception as exc:
-            logging.warning("Skipping %s: %s", path, exc)
-            continue
+            logging.debug("Invalid geometry for %s: %s", code, exc)
 
-        for feature in data.get("features", []):
-            props = feature.get("properties", {})
-            code = props.get("CODE")
-            geom = feature.get("geometry")
-            if not code or not geom:
-                continue
-            if code in zones:
-                continue
-            try:
-                geometry = shape(geom)
-                zones[code] = Zone(
-                    code=code,
-                    geometry=geometry,
-                    geometry_metric=project_geometry(geometry),
-                )
-            except Exception as exc:
-                logging.debug("Invalid geometry for %s: %s", code, exc)
-
-    logging.info("Loaded %s zones from %s files", len(zones), len(files))
+    logging.info("Loaded %s zones", len(zones))
     return ZoneIndex(zones)
 
 
@@ -204,3 +251,7 @@ def load_zsj_mapping() -> Dict[str, Dict[str, Any]]:
     df = pd.read_csv(ZONES_TO_ZSJ_PATH)
     df = df.sort_values("overlap", ascending=False).drop_duplicates("code")
     return df.set_index("code")[["kod_zsj", "naz_zsj", "mestska_cast"]].to_dict("index")
+
+
+if __name__ == "__main__":
+    print(f"Saved {write_zone_snapshot()} zones to {ZONES_SNAPSHOT_PATH}")

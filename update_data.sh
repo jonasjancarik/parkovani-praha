@@ -26,3 +26,5 @@ uv run python -m src.permit_zone_mapping audit-history \
 cp "$TMP/candidate.csv" data/processed/data_permits_by_zone.csv
 echo "Installed audited permit candidate (manifest: $TMP/manifest.json)"
 uv run python join.py
+# Zone shapes for the address report, taken from the newest downloaded month.
+uv run python web_app/geo.py
