@@ -285,6 +285,8 @@ malými písmeny, např. `p8-2039`) a po nasazení kandidáta z `audit-history` 
 oprávnění sedí na zdroj (červen 2026: 228 529). Všech pět strukturálních bran
 manifestu je splněno; jediný zbývající důvod, proč `release_decision.ready` je
 `false`, je neschválená prostorová revize (vzdálenosti, remízy, náhradní
-souřadnice). Pozor: `process.py` si `data_permits_by_zone.csv` stále znovu
-vytváří ze starého mapování, takže po jeho spuštění je nutné kandidáta nasadit
-znovu.
+souřadnice). `process.py` si `data_permits_by_zone.csv` stále znovu vytváří ze
+starého mapování, proto po stažení nových dat spouštějte `./update_data.sh`:
+spustí `process.py`, `audit-history --strict`, nasadí kandidáta a spustí
+`join.py`. Při nesplněné strukturální bráně skončí chybou dřív, než kandidáta
+nasadí.

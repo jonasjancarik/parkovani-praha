@@ -37,6 +37,10 @@ Přehled datových souborů:
 - `data_spaces.csv` - data o počtech parkovacích míst podle jednotlivých městských částí
 - `data_permits_and_spaces.csv` - kombinace předchozích dvou souborů
 
+Po stažení nových dat (`uv run python download.py`) spusťte `./update_data.sh`; zpracuje
+data, nasadí auditované přiřazení oprávnění k úsekům a sestaví
+`data_parking_and_permits.csv`. Podrobnosti viz `docs/parking-data-quality-handoff.md`.
+
 ## Web app (Streamlit)
 
 Spuštění:
