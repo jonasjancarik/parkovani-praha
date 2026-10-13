@@ -191,7 +191,7 @@ function TrendBreakdown({ analytics, reduceMotion }) {
     permits: {
       rows: analytics.permits_by_type,
       title: "Oprávnění podle typu",
-      subtitle: "Složení vydaných parkovacích oprávnění v čase",
+      subtitle: "Složení vydaných parkovacích oprávnění v čase; bez oprávnění budov dál než 500 m od úseku zóny (asi 2 %)",
     },
     parkers: {
       rows: analytics.parkers_by_type,
