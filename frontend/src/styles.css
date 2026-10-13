@@ -64,16 +64,17 @@ button { color: inherit; }
 .masthead nav { display: flex; height: 100%; gap: 20px; }
 .nav-coming-soon { align-self: center; display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 7px 0; color: #625f58; font-size: 13px; }
 .nav-coming-soon small { color: var(--muted); font-size: 11px; }
-.masthead nav button {
+.masthead nav a {
   position: relative;
-  border: 0;
+  display: inline-flex;
+  align-items: center;
   padding: 3px 7px 0;
-  background: transparent;
+  color: inherit;
   font-size: 13px;
-  cursor: pointer;
+  text-decoration: none;
 }
-.masthead nav button.active { font-weight: 600; }
-.masthead nav button.active::after,
+.masthead nav a.active { font-weight: 600; }
+.masthead nav a.active::after,
 .view-tabs button.active::after {
   content: "";
   position: absolute;
@@ -477,6 +478,78 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   font-size: 11px;
 }
 
+.address-toolbar {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.7fr) minmax(120px, .45fr) minmax(170px, .6fr) auto;
+  align-items: end;
+  gap: 14px 26px;
+  padding: 15px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.address-toolbar .toolbar-actions { width: auto; padding-bottom: 2px; }
+.address-toolbar .toolbar-status { order: -1; }
+.address-input { display: flex; gap: 8px; }
+.address-input input {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid #c8c2b7;
+  border-radius: 6px;
+  padding: 0 11px;
+  background: rgba(255,255,255,.38);
+  color: var(--ink);
+  font-size: 13px;
+}
+.address-input input:focus-visible { border-color: var(--teal); outline: 2px solid rgba(17, 79, 80, .16); outline-offset: 1px; }
+.address-error { grid-column: 1 / -1; margin: 0; color: #87251f; font-size: 13px; }
+.address-grid { min-height: 0; }
+.address-grid .primary-content { padding-top: 20px; }
+/* Leaflet stacks its panes up to z-index 1000; keep them under menus and the skip link. */
+.map-frame { position: relative; z-index: 0; isolation: isolate; border: 1px solid var(--rule); }
+.zone-map { width: 100%; height: 520px; background: #ebe7de; font: inherit; cursor: crosshair; }
+/* The street map is only a backdrop for the zones, so it is toned down to the paper palette. */
+.zone-map .leaflet-tile-pane { filter: grayscale(1) sepia(.18) contrast(.82) brightness(1.08); }
+.zone-map .leaflet-tooltip { border: 1px solid #d9d4ca; border-radius: 4px; background: #fffdf8; color: var(--ink); font-size: 12px; box-shadow: none; }
+.zone-map .leaflet-tooltip::before { display: none; }
+.zone-map .leaflet-control-attribution { background: rgba(247, 244, 237, .85); color: var(--muted); font-size: 10px; }
+.zone-map .leaflet-control-attribution a { color: inherit; }
+.selection-label { font: 400 19px/1.25 "Newsreader", Georgia, serif !important; overflow-wrap: anywhere; }
+.insight-metric.spaces strong, .insight-metric.spaces small { color: var(--teal); }
+.insight-metric.neutral strong { color: var(--ink); font-size: 30px; }
+.insight-metric.neutral small { color: #5f5c55; }
+.insight-panel .metric-note { margin-top: 10px !important; color: var(--muted); font-size: 12px !important; }
+
+.address-sections { transition: opacity 180ms ease; }
+.address-sections.is-refreshing { opacity: .55; }
+.address-section { padding: 44px 0 0; }
+.address-section h2 { margin-bottom: 0; font: 400 21px/1.15 "Newsreader", Georgia, serif; }
+.address-section .section-heading p, .address-section .table-heading p { max-width: 78ch; line-height: 1.45; }
+.address-chart { width: 100%; height: 280px; margin-top: 12px; }
+.export-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.zone-table-wrap { margin-top: 16px; overflow-x: auto; }
+.zone-table { font-size: 13px; font-variant-numeric: tabular-nums; }
+.zone-table th, .zone-table td { padding: 9px 12px; border-bottom: 1px solid #e2ddd4; }
+.zone-table thead th { color: var(--muted); font-size: 12px; vertical-align: bottom; }
+.zone-table .is-text { text-align: left; }
+.zone-table th:first-child { padding-left: 0; }
+.zone-table td:last-child, .zone-table th:last-child { padding-right: 0; }
+.zone-table th button { display: inline-flex; align-items: center; gap: 3px; border: 0; padding: 0; background: transparent; color: inherit; font-weight: inherit; cursor: pointer; }
+.zone-table thead th[aria-sort] { color: var(--ink); }
+.zone-table .is-flagged { color: var(--ink); font-weight: 600; }
+.zone-tag { margin-left: 8px; border: 1px solid #cdc7bc; border-radius: 3px; padding: 2px 5px; color: #5f5c55; font-size: 11px; font-weight: 400; }
+.sparkline { display: inline-block; vertical-align: middle; overflow: visible; }
+.sparkline path { fill: none; stroke: var(--teal); stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+.show-more { margin-top: 14px; }
+.comparison-table thead th { white-space: normal; }
+.comparison-table tbody th button { color: var(--teal); text-decoration: underline; text-underline-offset: 3px; }
+.comparison-table tr.is-current th, .comparison-table tr.is-current td { background: rgba(255,255,255,.5); }
+.comparison-table tr.is-current th button { color: var(--ink); font-weight: 600; text-decoration: none; }
+.reference-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 34px 40px; margin-top: 24px; }
+.reference-charts > div { min-width: 0; }
+.reference-charts h3 { margin: 0; font: 400 17px/1.2 "Newsreader", Georgia, serif; }
+.reference-charts p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+
 @media (max-width: 1365px) {
   .sticky-toolbar { position: static; grid-template-columns: 1fr; }
   .filter-bar { padding-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -493,13 +566,18 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .parker-composition { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }
   .pressure-forecast-grid { grid-template-columns: 1fr; }
   .pressure-forecast-grid > div + div { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }
+  .address-toolbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .address-field { grid-column: 1 / -1; }
+  .address-toolbar .toolbar-actions { grid-column: 1 / -1; }
+  .address-toolbar .toolbar-status { order: 0; }
+  .reference-charts { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
   .app-shell { padding-inline: 16px; }
   .masthead { grid-template-columns: 1fr auto; height: auto; min-height: 60px; }
   .masthead nav { grid-row: 2; grid-column: 1 / -1; height: 42px; }
-  .masthead nav button { padding-left: 0; padding-right: 0; white-space: nowrap; }
+  .masthead nav a { padding-left: 0; padding-right: 0; white-space: nowrap; }
   .nav-coming-soon, .data-date { display: none; }
   .explorer-head { display: block; padding: 28px 0 0; }
   .explorer-head h1 { font-size: 39px; }
@@ -534,6 +612,11 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .parker-share-chart { height: 350px; }
   .forecast-select { margin-top: 14px; width: 180px; }
   .analytics-sections { margin-top: 28px; }
+  .address-toolbar { grid-template-columns: 1fr; margin-top: 24px; }
+  .zone-map { height: 380px; }
+  .address-section .table-heading { display: block; }
+  .export-actions { margin-top: 12px; }
+  .address-chart { height: 250px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

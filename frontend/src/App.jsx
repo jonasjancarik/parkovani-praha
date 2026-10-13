@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   IconAdjustmentsHorizontal,
-  IconCalendar,
   IconChevronDown,
   IconDownload,
   IconInfoCircle,
@@ -37,6 +36,17 @@ import {
   sameSelection,
   stateToSearch,
 } from "./explorerState.js";
+import {
+  TIME_LABELS,
+  ZONE_LABELS,
+  districtName,
+  formatNumber,
+  formatRatio,
+  isoToCzech,
+  numberFormat,
+  ratioFormat,
+} from "./format.js";
+import { Masthead } from "./Masthead.jsx";
 
 const RED = "#e33b32";
 const TEAL = "#114f50";
@@ -49,19 +59,6 @@ const PANEL_GAP = 46;
 // Room to the right of the lines, reserved for their labels.
 const END_LABEL_WIDTH = 150;
 const END_LABEL_HEIGHT = 48;
-const TIME_LABELS = {
-  "Po-Pá": "Pracovní dny",
-  "Po-Pá (MPD)": "Pracovní dny · měření",
-  "So-Ne": "Víkend",
-  den: "Den",
-  noc: "Noc",
-};
-const ZONE_LABELS = {
-  MIX: "Smíšená",
-  OST: "Ostatní",
-  RES: "Rezidentní",
-  VIS: "Návštěvnická",
-};
 
 
 function lineGradient(start, end) {
@@ -79,30 +76,10 @@ function lineGradient(start, end) {
   };
 }
 
-const numberFormat = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 });
-const ratioFormat = new Intl.NumberFormat("cs-CZ", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-const dateFormat = new Intl.DateTimeFormat("cs-CZ");
-
-function formatNumber(value) {
-  return value == null ? "—" : numberFormat.format(value);
-}
-
-function formatRatio(value) {
-  return value == null ? "—" : ratioFormat.format(value);
-}
-
 function pct(value) {
   if (value == null) return "—";
   const rounded = Math.round(value * 100);
   return `${rounded > 0 ? "+" : ""}${rounded} %`;
-}
-
-function isoToCzech(value) {
-  if (!value) return "—";
-  return dateFormat.format(new Date(`${value}T12:00:00`));
 }
 
 function downloadSeriesCsv(series) {
@@ -375,7 +352,7 @@ function DistrictTable({ districts, month }) {
         <tbody>
           {districts.map((row) => (
             <tr key={row.district}>
-              <th scope="row">{row.district.replace(/^P0?/, "Praha ")}</th>
+              <th scope="row">{districtName(row.district)}</th>
               <td className="district-bar" aria-hidden="true">
                 <span style={{ width: `${highest ? (row.permits_per_space / highest) * 100 : 0}%` }} />
               </td>
@@ -506,7 +483,7 @@ function TableView({ payload }) {
 function InsightPanel({ payload, filters }) {
   const summary = payload.summary;
   const districtText = filters.districts.length
-    ? filters.districts.map((value) => value.replace(/^P0?/, "Praha ")).join(", ")
+    ? filters.districts.map(districtName).join(", ")
     : "Praha · všechny městské části";
 
   return (
@@ -660,14 +637,7 @@ export function App() {
   return (
     <div className="app-shell">
       <a className="skip-link" href="#explorer">Přejít k datovému průzkumníku</a>
-      <header className="masthead">
-        <a className="brand" href="#explorer">Parkování Praha</a>
-        <nav aria-label="Hlavní navigace">
-          <span className="nav-coming-soon" title="Městský přehled připravujeme">Městský přehled <small>Připravujeme</small></span>
-          <button className="active" type="button">Datový průzkumník</button>
-        </nav>
-        <span className="data-date">Data k {isoToCzech(payload?.options.max_date)} <IconCalendar size={17} stroke={1.5} /></span>
-      </header>
+      <Masthead page="explorer" dataDate={payload?.options.max_date} />
 
       <main id="explorer">
         <section className="explorer-head">
