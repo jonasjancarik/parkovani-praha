@@ -274,3 +274,17 @@ uv run python join.py
    obou datových sad?
 3. Je úplné mapování ZSJ podmínkou stejného release, nebo navazující opravou s
    jasně označenou neúplností ZSJ analýzy?
+
+## Stav po aktualizaci 13. října 2026
+
+Chybějící parkovací měsíce (prosinec 2024, říjen až prosinec 2025) portál TSK
+poskytuje; původně se prostě nestáhly. Po jejich stažení, po opravě převodu
+kódů úseků na velká písmena v `load_month_zones` (některé exporty mají kód
+malými písmeny, např. `p8-2039`) a po nasazení kandidáta z `audit-history` jako
+`data_permits_by_zone.csv` prochází `join.py` bez neaktivních cílů a součty
+oprávnění sedí na zdroj (červen 2026: 228 529). Všech pět strukturálních bran
+manifestu je splněno; jediný zbývající důvod, proč `release_decision.ready` je
+`false`, je neschválená prostorová revize (vzdálenosti, remízy, náhradní
+souřadnice). Pozor: `process.py` si `data_permits_by_zone.csv` stále znovu
+vytváří ze starého mapování, takže po jeho spuštění je nutné kandidáta nasadit
+znovu.

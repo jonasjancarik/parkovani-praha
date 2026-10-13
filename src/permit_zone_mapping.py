@@ -174,7 +174,7 @@ def load_month_zones(zones_dir: Path, month: str, active_codes: set[str]) -> gpd
         with path.open(encoding="utf-8") as handle:
             features = json.load(handle).get("features", [])
         for feature in features:
-            code = str(feature.get("properties", {}).get("CODE") or "")
+            code = str(feature.get("properties", {}).get("CODE") or "").strip().upper()
             if code not in active_codes or code in rows_by_code or not feature.get("geometry"):
                 continue
             geometry = make_valid(shape(feature["geometry"]))
