@@ -89,6 +89,24 @@ missing months as gaps. `Průměr z 12 měření` adds a trailing average from t
 latest available observations, while retaining those gaps in the trend line. It
 remains a visual overlay and never replaces API values or CSV exports.
 
+### City overview
+
+`Městský přehled` is the page the app opens with (`/`). It needs no filtering: it
+shows the latest citywide number of permits, parking spaces and permits per space
+with the change against the same month a year earlier, the development of permits
+per space, every district ranked by that ratio, who is parked in the zones by day
+and by night, and an address field that leads to `Okolí adresy`. The sentences on
+the page are written from the data, so they stay correct after each data update.
+
+The figures come from `/api/overview` (`web_app/city_overview.py`) and use the
+explorer's default selection, so they match what the explorer shows before any
+filter is changed. Districts with fewer than 1,000 paid-parking spaces are left
+out of the ranking. A yearly change is reported only when the same month of the
+previous year has data.
+
+The explorer now lives at `/?page=explorer`. Explorer links shared earlier, which
+carry filters but no page name, still open the explorer.
+
 ### Address report
 
 `Okolí adresy` (`/?page=address`) shows the paid-parking zones within walking
