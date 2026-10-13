@@ -116,3 +116,44 @@ def test_verdict_combines_shape_and_cars() -> None:
     assert result.loc["P1-LOW", "suspect_value"] == "před skokem (obsazenost 140%)"
     assert result.loc["P2-NEW", "redrawn_in_district"] == 2
     assert result.loc["P1-ERR", "redrawn_in_district"] == 0
+
+
+def test_confirmed_correction_keeps_the_number_of_parked_cars(tmp_path) -> None:
+    from src.parking_cleanup import (
+        apply_confirmed_capacity_corrections,
+        load_confirmed_capacity_corrections,
+    )
+
+    path = tmp_path / "corrections.csv"
+    path.write_text(
+        "kod_useku,od,do,puvodni_mist_v_zps,mist_v_zps,mist_celkem,duvod\n"
+        'P5-1,2024-02,2024-03,245,66,70,"zkouška"\n',
+        encoding="utf-8",
+    )
+    source = pd.DataFrame(
+        {
+            "CODE": ["P5-1", "P5-1", "P5-1", "P5-1", "P5-2"],
+            "date": pd.to_datetime(["2024-01-31", "2024-02-29", "2024-03-31", "2024-04-30", "2024-02-29"]),
+            # March already carries the right value, as if the source had been fixed.
+            "PS_ZPS": [65, 245, 66, 66, 245],
+            "CELKEM_PS": [70, 250, 70, 70, 250],
+            "Obs": [60, 12, 50, 55, 12],
+        }
+    )
+
+    corrected, records = apply_confirmed_capacity_corrections(
+        source,
+        load_confirmed_capacity_corrections(path),
+        code_col="CODE",
+        date_col="date",
+        zps_capacity_col="PS_ZPS",
+        total_capacity_col="CELKEM_PS",
+        occupancy_col="Obs",
+    )
+
+    assert corrected["PS_ZPS"].tolist() == [65, 66, 66, 66, 245]
+    assert corrected["CELKEM_PS"].tolist() == [70, 70, 70, 70, 250]
+    # 12 % of 245 spaces is 29.4 cars, which is 44.5 % of 66 spaces.
+    assert round(corrected.loc[1, "Obs"], 1) == 44.5
+    assert corrected.loc[[0, 2, 3, 4], "Obs"].tolist() == [60, 50, 55, 12]
+    assert (records[0]["rows_corrected"], records[0]["rows_left_unchanged"]) == (1, 1)

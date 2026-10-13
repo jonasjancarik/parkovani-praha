@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 import numpy as np
@@ -403,3 +404,92 @@ def _variants_agree(
         if (spread > tolerance).any():
             return False
     return True
+
+
+CONFIRMED_CORRECTION_COLUMNS = [
+    "kod_useku",
+    "od",
+    "do",
+    "puvodni_mist_v_zps",
+    "mist_v_zps",
+    "mist_celkem",
+    "duvod",
+]
+
+
+def load_confirmed_capacity_corrections(path: Path | str) -> pd.DataFrame:
+    """Read the hand-reviewed capacity corrections; months are inclusive."""
+    corrections = pd.read_csv(path, dtype={"kod_useku": str, "od": str, "do": str})
+    missing = set(CONFIRMED_CORRECTION_COLUMNS).difference(corrections.columns)
+    if missing:
+        raise ValueError(
+            "Confirmed capacity corrections lack columns: " + ", ".join(sorted(missing))
+        )
+    corrections["start_date"] = pd.to_datetime(corrections["od"] + "-01") + pd.offsets.MonthEnd(0)
+    corrections["end_date"] = pd.to_datetime(corrections["do"] + "-01") + pd.offsets.MonthEnd(0)
+    if (corrections["end_date"] < corrections["start_date"]).any():
+        raise ValueError("Confirmed capacity correction ends before it starts")
+    numeric = ["puvodni_mist_v_zps", "mist_v_zps", "mist_celkem"]
+    if corrections[numeric].isna().any().any() or (corrections[numeric] <= 0).any().any():
+        raise ValueError("Confirmed capacity corrections need positive capacities")
+    return corrections
+
+
+def apply_confirmed_capacity_corrections(
+    df: pd.DataFrame,
+    corrections: pd.DataFrame,
+    *,
+    code_col: str,
+    date_col: str,
+    zps_capacity_col: str,
+    total_capacity_col: str,
+    occupancy_col: str,
+    match_rel_tolerance: float = 0.10,
+    match_abs_tolerance: float = 3.0,
+) -> tuple[pd.DataFrame, list[dict]]:
+    """Replace capacities that a person confirmed to be wrong in the source.
+
+    Only rows that still carry the reviewed wrong value are changed, so a
+    correction stops applying once the source is fixed. Occupancy is rebased so
+    that the number of parked cars stays what the source reported.
+    """
+    result = df.copy()
+    dates = pd.to_datetime(result[date_col])
+    zps = pd.to_numeric(result[zps_capacity_col], errors="coerce")
+    occupancy = pd.to_numeric(result[occupancy_col], errors="coerce")
+    # Rebased occupancy is fractional; capacities keep the type the source has.
+    result[occupancy_col] = result[occupancy_col].astype(float)
+    records = []
+    for correction in corrections.itertuples():
+        in_period = (
+            (result[code_col] == correction.kod_useku)
+            & (dates >= correction.start_date)
+            & (dates <= correction.end_date)
+        )
+        tolerance = max(
+            match_abs_tolerance, correction.puvodni_mist_v_zps * match_rel_tolerance
+        )
+        matches = in_period & ((zps - correction.puvodni_mist_v_zps).abs() <= tolerance)
+        result.loc[matches, occupancy_col] = (
+            occupancy[matches] * zps[matches] / correction.mist_v_zps
+        )
+        for column, value in (
+            (zps_capacity_col, correction.mist_v_zps),
+            (total_capacity_col, correction.mist_celkem),
+        ):
+            result.loc[matches, column] = result[column].dtype.type(value)
+        records.append(
+            {
+                "code": correction.kod_useku,
+                "start_date": correction.start_date.date().isoformat(),
+                "end_date": correction.end_date.date().isoformat(),
+                "original_zps": float(correction.puvodni_mist_v_zps),
+                "corrected_zps": float(correction.mist_v_zps),
+                "corrected_total": float(correction.mist_celkem),
+                "reason": correction.duvod,
+                "rows_corrected": int(matches.sum()),
+                # Rows of the period that no longer carry the reviewed wrong value.
+                "rows_left_unchanged": int((in_period & ~matches).sum()),
+            }
+        )
+    return result, records

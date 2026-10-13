@@ -17,7 +17,11 @@ from src.parking_anomalies import (
     summarize_value_changes,
     validate_processed_parking_data,
 )
-from src.parking_cleanup import apply_verified_capacity_regime_cleanup
+from src.parking_cleanup import (
+    apply_confirmed_capacity_corrections,
+    apply_verified_capacity_regime_cleanup,
+    load_confirmed_capacity_corrections,
+)
 import logging
 from dotenv import load_dotenv
 import zipfile
@@ -31,6 +35,9 @@ logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),  # default to INFO
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
+
+# Capacities a person reviewed and confirmed to be wrong in the source.
+CONFIRMED_CAPACITY_CORRECTIONS = "data/confirmed_capacity_corrections.csv"
 
 
 def parse_arguments():
@@ -496,6 +503,28 @@ def process_parked_cars(
                 )
             ].reset_index(drop=True)
 
+            logging.info("Applying confirmed capacity corrections...")
+            parked_cars_all_df, confirmed_corrections = (
+                apply_confirmed_capacity_corrections(
+                    parked_cars_all_df,
+                    load_confirmed_capacity_corrections(
+                        CONFIRMED_CAPACITY_CORRECTIONS
+                    ),
+                    code_col="CODE",
+                    date_col="date",
+                    zps_capacity_col="PS_ZPS",
+                    total_capacity_col="CELKEM_PS",
+                    occupancy_col="Obs",
+                )
+            )
+            for record in confirmed_corrections:
+                if record["rows_corrected"] == 0:
+                    logging.warning(
+                        "Confirmed correction for %s changed nothing; the source "
+                        "may have been fixed.",
+                        record["code"],
+                    )
+
             logging.info("Correcting verified temporary capacity regimes...")
             parked_cars_all_df, verified_regimes = (
                 apply_verified_capacity_regime_cleanup(
@@ -524,8 +553,9 @@ def process_parked_cars(
                 record["confirmed_at"] = regime.confirmed_at.date().isoformat()
                 regime_records.append(record)
             capacity_corrections = {
-                "mode": "verified paired regimes only",
+                "mode": "confirmed corrections and verified paired regimes",
                 "verified_regimes": regime_records,
+                "confirmed_corrections": confirmed_corrections,
                 "hierarchy_issues_reported": int(hierarchy_issues.sum()),
                 "changes": summarize_value_changes(
                     raw_parking_observations,
@@ -540,6 +570,7 @@ def process_parked_cars(
             capacity_corrections = {
                 "mode": "disabled",
                 "verified_regimes": [],
+                "confirmed_corrections": [],
                 "changes": {},
             }
 

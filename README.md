@@ -343,6 +343,25 @@ porovná dvě nezávislé věci: počet zaparkovaných aut (kapacita × obsazeno
   `prekresleno_useku_v_mc` ukazuje, kolik úseků téže městské části se ten měsíc
   překreslilo; vysoké číslo znamená nové sčítání celé oblasti.
 
+#### Ručně potvrzené opravy kapacity
+
+Chyby, které automatická oprava neuzná (trvají příliš dlouho, úsek mezitím změnil
+typ nebo se hodnota vrátila teprve nedávno), se opravují podle
+`data/confirmed_capacity_corrections.csv`. Každý řádek je jedno rozhodnutí
+člověka: úsek, první a poslední měsíc chyby (`od`, `do`, včetně), chybná hodnota
+ze zdroje (`puvodni_mist_v_zps`), správné počty míst a zdůvodnění.
+
+Oprava se použije jen na řádky, které chybnou hodnotu stále obsahují (s tolerancí
+10 % nebo 3 místa). Když TSK zdroj opraví, řádek v souboru přestane cokoli měnit a
+zpracování na to upozorní v logu. Obsazenost se přepočítá na opravenou kapacitu,
+takže počet zaparkovaných aut zůstává podle zdroje. Použité opravy včetně počtu
+změněných řádků jsou v `data_parking_anomaly_report.json` pod
+`capacity_corrections.confirmed_corrections`.
+
+Kandidáty na nové řádky dává seznam skoků kapacity výše. Do souboru patří jen
+případy, kde je správná hodnota doložená; kontrolní export `parking_no_anomaly`
+tyto opravy nepoužívá.
+
 Otevřené datové problémy, blokátory publikace a doporučený cíl další práce
 shrnuje [předání k datové kvalitě](docs/parking-data-quality-handoff.md).
 
