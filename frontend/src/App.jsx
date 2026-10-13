@@ -41,11 +41,13 @@ import {
 const RED = "#e33b32";
 const TEAL = "#114f50";
 const SLATE = "#667386";
-// Plot area of the desktop time chart: the 380px `.time-chart` minus its grid margins.
-const TIME_CHART_GRID = { left: 58, right: 178, top: 38, bottom: 42 };
-// Room between the end of the lines and the right-hand scale, reserved for the line labels.
-const END_LABEL_WIDTH = 136;
-const TIME_CHART_PLOT_HEIGHT = 380 - TIME_CHART_GRID.top - TIME_CHART_GRID.bottom;
+// Height of `.time-chart` in styles.css at widths where the lines carry their own labels.
+const TIME_CHART_HEIGHT = 460;
+const CHART_BOTTOM = 42;
+const RATIO_PANEL_HEIGHT = 84;
+const PANEL_GAP = 46;
+// Room to the right of the lines, reserved for their labels.
+const END_LABEL_WIDTH = 150;
 const END_LABEL_HEIGHT = 48;
 const TIME_LABELS = {
   "Po-Pá": "Pracovní dny",
@@ -73,20 +75,6 @@ function lineGradient(start, end) {
       { offset: 0, color: start },
       { offset: 0.58, color: end },
       { offset: 1, color: end },
-    ],
-  };
-}
-
-function areaGradient(color) {
-  return {
-    type: "linear",
-    x: 0,
-    y: 0,
-    x2: 0,
-    y2: 1,
-    colorStops: [
-      { offset: 0, color: `${color}16` },
-      { offset: 1, color: `${color}00` },
     ],
   };
 }
@@ -157,14 +145,12 @@ function highestValue(rows, keys) {
 }
 
 // Vertical shifts that keep the labels at the right end of the lines from covering each other.
-function endLabelShifts(rows, countMax, ratioMax, keys) {
+function endLabelShifts(rows, axisMax, plotHeight, keys) {
   const positions = keys.map((key) => {
     const value = lastValue(rows, key);
-    if (value == null) return null;
-    const axisMax = key === "permits_per_space" ? ratioMax : countMax;
-    return TIME_CHART_PLOT_HEIGHT * (1 - value / axisMax);
+    return value == null ? null : plotHeight * (1 - value / axisMax);
   });
-  const placed = spreadLabels(positions, END_LABEL_HEIGHT, TIME_CHART_PLOT_HEIGHT);
+  const placed = spreadLabels(positions, END_LABEL_HEIGHT, plotHeight);
   return Object.fromEntries(keys.map((key, index) => [
     key,
     placed[index] == null ? 0 : Math.round(placed[index] - positions[index]),
@@ -178,6 +164,7 @@ function lineChartOption(
   metric = "permits-spaces",
   showTrend = false,
 ) {
+  const pressureOnly = metric === "pressure";
   const axisText = { color: "#73736f", fontFamily: "Inter, sans-serif", fontSize: 12 };
   const pointValue = (value) => Array.isArray(value) ? value[1] : value;
   const chartRows = materializeMonthlyRows(
@@ -186,35 +173,126 @@ function lineChartOption(
   );
   const countMax = niceAxisMax(highestValue(chartRows, ["permits", "spaces"]));
   const ratioMax = Math.max(2, Math.ceil(highestValue(chartRows, ["permits_per_space"]) * 2) / 2);
+  const top = compact ? 58 : 30;
+  const sides = { left: 58, right: compact ? 14 : END_LABEL_WIDTH };
+  const countBottom = CHART_BOTTOM + RATIO_PANEL_HEIGHT + PANEL_GAP;
   const labelShift = endLabelShifts(
     chartRows,
     countMax,
-    ratioMax,
-    metric === "pressure" ? ["permits_per_space"] : ["permits", "spaces", "permits_per_space"],
+    TIME_CHART_HEIGHT - top - countBottom,
+    ["permits", "spaces"],
   );
+  // The ratio has its own scale, so it gets its own panel under the counts.
+  const ratioPanel = pressureOnly ? 0 : 1;
+
+  const timeAxis = {
+    type: "time",
+    boundaryGap: false,
+    axisLine: { lineStyle: { color: "#aaa59a" } },
+    axisTick: { show: false },
+    axisLabel: { ...axisText, formatter: "{yyyy}", hideOverlap: true },
+    axisPointer: { label: { formatter: ({ value }) => formatMonth(value) } },
+  };
+  const splitLine = { lineStyle: { color: "#e5e0d7", type: "dashed" } };
+  const countAxis = {
+    type: "value",
+    min: 0,
+    max: countMax,
+    splitNumber: 4,
+    axisLabel: { ...axisText, formatter: (value) => numberFormat.format(value) },
+    splitLine,
+  };
+  const ratioAxis = {
+    type: "value",
+    min: 0,
+    max: ratioMax,
+    splitNumber: pressureOnly ? 4 : 2,
+    axisLabel: { ...axisText, formatter: (value) => ratioFormat.format(value) },
+    splitLine,
+  };
   const common = {
     type: "line",
     showSymbol: false,
     smooth: false,
     connectNulls: false,
-    lineStyle: { width: 2.2 },
     emphasis: { focus: "series" },
     endLabel: {
-      show: true,
+      show: !compact,
       formatter: (params) => `${params.seriesName}\n${formatNumber(pointValue(params.value))}`,
       fontFamily: "Newsreader, Georgia, serif",
       fontSize: 14,
       lineHeight: 19,
     },
-    labelLayout: { moveOverlap: "shiftY" },
+    tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
   };
+  const ratioCommon = {
+    ...common,
+    xAxisIndex: ratioPanel,
+    yAxisIndex: ratioPanel,
+    tooltip: { valueFormatter: (value) => formatRatio(pointValue(value)) },
+  };
+  const lineStyle = (faded, color, width) => ({
+    color: lineGradient(faded, color),
+    width: showTrend ? width / 2 : width,
+    opacity: showTrend ? 0.38 : 1,
+  });
 
-  const option = {
+  const countSeries = [
+    {
+      ...common,
+      name: "Parkovací oprávnění",
+      data: chartRows.map((row) => [row.date, row.permits]),
+      endLabel: { ...common.endLabel, color: RED, offset: [0, labelShift.permits] },
+      lineStyle: lineStyle("#ed827b", RED, 2.4),
+    },
+    {
+      ...common,
+      name: "Parkovací místa",
+      data: chartRows.map((row) => [row.date, row.spaces]),
+      endLabel: { ...common.endLabel, color: TEAL, offset: [0, labelShift.spaces] },
+      lineStyle: lineStyle("#799b98", TEAL, 2.4),
+    },
+  ];
+  const ratioSeries = [{
+    ...ratioCommon,
+    name: "Oprávnění na místo",
+    data: chartRows.map((row) => [row.date, row.permits_per_space]),
+    endLabel: {
+      ...common.endLabel,
+      color: SLATE,
+      formatter: (params) => `${params.seriesName}\n${formatRatio(pointValue(params.value))}`,
+    },
+    lineStyle: lineStyle("#aeb6c0", SLATE, 2.2),
+  }];
+  if (showTrend) {
+    const average = (name, key, color, base) => ({
+      ...base,
+      name: `Průměr z 12 měření · ${name}`,
+      data: trailingObservationAverage(chartRows, key),
+      endLabel: { show: false },
+      lineStyle: { color, width: 2.4, type: "dashed" },
+    });
+    countSeries.push(
+      average("Parkovací oprávnění", "permits", RED, common),
+      average("Parkovací místa", "spaces", TEAL, common),
+    );
+    ratioSeries.push(average("Oprávnění na místo", "permits_per_space", SLATE, ratioCommon));
+  }
+
+  const legendLabels = {
+    "Parkovací oprávnění": "Oprávnění",
+    "Parkovací místa": "Místa",
+    "Oprávnění na místo": "Oprávnění / místo",
+  };
+  return {
     animationDuration: reduceMotion ? 0 : 650,
-    color: [RED, TEAL, SLATE],
-    grid: compact
-      ? { left: 48, right: 14, top: 58, bottom: 42 }
-      : TIME_CHART_GRID,
+    color: pressureOnly ? [SLATE] : [RED, TEAL, SLATE],
+    grid: pressureOnly
+      ? [{ ...sides, top, bottom: CHART_BOTTOM }]
+      : [
+          { ...sides, top, bottom: countBottom },
+          { ...sides, height: RATIO_PANEL_HEIGHT, bottom: CHART_BOTTOM },
+        ],
     legend: compact
       ? {
           show: true,
@@ -222,12 +300,8 @@ function lineChartOption(
           left: 0,
           itemWidth: 18,
           itemHeight: 2,
-          data: ["Parkovací oprávnění", "Parkovací místa", "Oprávnění na místo"],
-          formatter: (name) => ({
-            "Parkovací oprávnění": "Oprávnění",
-            "Parkovací místa": "Místa",
-            "Oprávnění na místo": "Oprávnění / místo",
-          })[name] ?? name,
+          data: Object.keys(legendLabels).slice(pressureOnly ? 2 : 0),
+          formatter: (name) => legendLabels[name] ?? name,
           textStyle: { color: "#4f4c45", fontFamily: "Inter, sans-serif", fontSize: 11 },
         }
       : { show: false },
@@ -236,117 +310,23 @@ function lineChartOption(
       backgroundColor: "#fffdf8",
       borderColor: "#d9d4ca",
       textStyle: { color: "#26251f", fontFamily: "Inter, sans-serif" },
-      valueFormatter: (value) => formatNumber(pointValue(value)),
+      // Both panels report into one list: counts first, then the ratio.
+      formatter: (items) => {
+        const rows = [...items].sort((first, second) => first.seriesIndex - second.seriesIndex);
+        const lines = rows.map((item) => {
+          const format = item.seriesName.includes("Oprávnění na místo") ? formatRatio : formatNumber;
+          return `<div style="display:flex;justify-content:space-between;gap:24px"><span>${item.marker}${item.seriesName}</span><strong>${format(pointValue(item.value))}</strong></div>`;
+        });
+        return `<div style="margin-bottom:6px">${formatMonth(rows[0].axisValue)}</div>${lines.join("")}`;
+      },
     },
-    xAxis: {
-      type: "time",
-      boundaryGap: false,
-      axisLine: { lineStyle: { color: "#aaa59a" } },
-      axisTick: { show: false },
-      axisLabel: {
-        ...axisText,
-        formatter: "{yyyy}",
-        hideOverlap: true,
-      },
-      axisPointer: { label: { formatter: ({ value }) => formatMonth(value) } },
-    },
-    yAxis: [
-      {
-        type: "value",
-        min: 0,
-        max: countMax,
-        splitNumber: 4,
-        axisLabel: {
-          ...axisText,
-          formatter: (value) => numberFormat.format(value),
-        },
-        splitLine: { lineStyle: { color: "#e5e0d7", type: "dashed" } },
-      },
-      {
-        type: "value",
-        min: 0,
-        max: ratioMax,
-        offset: compact ? 0 : END_LABEL_WIDTH,
-        splitNumber: 4,
-        axisLabel: { ...axisText, formatter: (value) => ratioFormat.format(value) },
-        splitLine: { show: false },
-      },
-    ],
-    series: [
-      {
-        ...common,
-        name: "Parkovací oprávnění",
-        data: chartRows.map((row) => [row.date, row.permits]),
-        endLabel: { ...common.endLabel, show: !compact, color: RED, offset: [0, labelShift.permits] },
-        lineStyle: { color: lineGradient("#ed827b", RED), width: showTrend ? 1.3 : 2.4, opacity: showTrend ? 0.38 : 1 },
-        areaStyle: showTrend ? undefined : { color: areaGradient(RED) },
-        tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
-      },
-      {
-        ...common,
-        name: "Parkovací místa",
-        data: chartRows.map((row) => [row.date, row.spaces]),
-        endLabel: { ...common.endLabel, show: !compact, color: TEAL, offset: [0, labelShift.spaces] },
-        lineStyle: { color: lineGradient("#799b98", TEAL), width: showTrend ? 1.3 : 2.4, opacity: showTrend ? 0.38 : 1 },
-        areaStyle: showTrend ? undefined : { color: areaGradient(TEAL) },
-        tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
-      },
-      {
-        ...common,
-        name: "Oprávnění na místo",
-        yAxisIndex: 1,
-        data: chartRows.map((row) => [row.date, row.permits_per_space]),
-        endLabel: {
-          ...common.endLabel,
-          show: !compact,
-          color: SLATE,
-          offset: [0, labelShift.permits_per_space],
-          formatter: (params) => `${params.seriesName}\n${formatRatio(pointValue(params.value))}`,
-        },
-        lineStyle: { color: lineGradient("#aeb6c0", SLATE), width: showTrend ? 1.1 : 1.8, opacity: showTrend ? 0.38 : 1 },
-        tooltip: { valueFormatter: (value) => formatRatio(pointValue(value)) },
-      },
-    ],
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    xAxis: pressureOnly
+      ? [timeAxis]
+      : [{ ...timeAxis, axisLabel: { show: false } }, { ...timeAxis, gridIndex: 1 }],
+    yAxis: pressureOnly ? [ratioAxis] : [countAxis, { ...ratioAxis, gridIndex: 1 }],
+    series: pressureOnly ? ratioSeries : [...countSeries, ...ratioSeries],
   };
-  if (showTrend) {
-    option.series.push(
-      {
-        ...common,
-        name: "Průměr z 12 měření · Parkovací oprávnění",
-        data: trailingObservationAverage(chartRows, "permits"),
-        endLabel: { show: false },
-        lineStyle: { color: RED, width: 2.6, type: "dashed" },
-        tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
-      },
-      {
-        ...common,
-        name: "Průměr z 12 měření · Parkovací místa",
-        data: trailingObservationAverage(chartRows, "spaces"),
-        endLabel: { show: false },
-        lineStyle: { color: TEAL, width: 2.6, type: "dashed" },
-        tooltip: { valueFormatter: (value) => formatNumber(pointValue(value)) },
-      },
-      {
-        ...common,
-        name: "Průměr z 12 měření · Oprávnění na místo",
-        yAxisIndex: 1,
-        data: trailingObservationAverage(chartRows, "permits_per_space"),
-        endLabel: { show: false },
-        lineStyle: { color: SLATE, width: 2.3, type: "dashed" },
-        tooltip: { valueFormatter: (value) => formatRatio(pointValue(value)) },
-      },
-    );
-  }
-  if (metric === "pressure") {
-    option.yAxis = [{ ...option.yAxis[1], position: "left", offset: 0 }];
-    option.series = option.series.reduce((pressureSeries, item) => {
-      if (item.name.includes("Oprávnění na místo")) {
-        pressureSeries.push({ ...item, yAxisIndex: 0 });
-      }
-      return pressureSeries;
-    }, []);
-  }
-  return option;
 }
 
 function hasDrawableObservationTrend(series, keys) {
@@ -354,61 +334,66 @@ function hasDrawableObservationTrend(series, keys) {
   return keys.some((key) => hasDrawableObservationAverage(rows, key));
 }
 
-function districtChartOption(districts, reduceMotion = false) {
-  const values = districts.map((row) => row.permits_per_space);
-  return {
-    animationDuration: reduceMotion ? 0 : 500,
-    grid: { left: 76, right: 52, top: 24, bottom: 14 },
-    xAxis: {
-      type: "value",
-      position: "top",
-      min: 0,
-      max: Math.max(3, ...values.map((value) => Math.ceil(value * 2) / 2)),
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: "#77736a", fontFamily: "Inter, sans-serif", fontSize: 12 },
-      splitLine: { show: false },
-    },
-    yAxis: {
-      type: "category",
-      inverse: true,
-      data: districts.map((row) => row.district.replace(/^P0?/, "Praha ")),
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: "#292821", fontFamily: "Inter, sans-serif", fontSize: 12 },
-    },
-    tooltip: {
-      trigger: "item",
-      formatter: ({ name, value }) => `${name}: ${ratioFormat.format(value)}`,
-    },
-    series: [
-      {
-        type: "bar",
-        data: values,
-        barWidth: 2,
-        itemStyle: { color: "#aab9b6" },
-        z: 1,
-      },
-      {
-        type: "scatter",
-        data: districts.map((row, index) => [row.permits_per_space, index]),
-        symbolSize: 10,
-        itemStyle: { color: TEAL },
-        label: {
-          show: true,
-          position: "right",
-          formatter: ({ value }) => ratioFormat.format(value[0]),
-          color: TEAL,
-          fontFamily: "Newsreader, Georgia, serif",
-          fontSize: 13,
-        },
-        z: 3,
-      },
-    ],
-  };
+function ChartToggle({ label, value, options, onChange }) {
+  return (
+    <div className="chart-toggle" role="group" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={String(option.value)}
+          type="button"
+          className={value === option.value ? "active" : ""}
+          aria-pressed={value === option.value}
+          disabled={option.disabled}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
-function ChartView({ payload, metric }) {
+function DistrictTable({ districts, month }) {
+  const highest = Math.max(...districts.map((row) => row.permits_per_space ?? 0), 0);
+  return (
+    <section className="district-section" aria-labelledby="district-heading">
+      <div className="section-heading">
+        <h2 id="district-heading">Porovnání městských částí</h2>
+        <p>Oprávnění na 1 parkovací místo, {month}</p>
+      </div>
+      <table className="district-table">
+        <caption className="sr-only">Pět městských částí, kde na jedno parkovací místo připadá nejvíc oprávnění</caption>
+        <thead>
+          <tr>
+            <th scope="col">Městská část</th>
+            <td aria-hidden="true" />
+            <th scope="col">Oprávnění na místo</th>
+            <th scope="col">Oprávnění</th>
+            <th scope="col">Parkovací místa</th>
+          </tr>
+        </thead>
+        <tbody>
+          {districts.map((row) => (
+            <tr key={row.district}>
+              <th scope="row">{row.district.replace(/^P0?/, "Praha ")}</th>
+              <td className="district-bar" aria-hidden="true">
+                <span style={{ width: `${highest ? (row.permits_per_space / highest) * 100 : 0}%` }} />
+              </td>
+              <td className="district-ratio">{formatRatio(row.permits_per_space)}</td>
+              <td>{formatNumber(row.permits)}</td>
+              <td>{formatNumber(row.spaces)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="data-note">
+        Pozn.: Zahrnuje aktivní oprávnění a veřejná i neveřejná parkovací místa v regulovaných zónách.
+      </p>
+    </section>
+  );
+}
+
+function ChartView({ payload, metric, onMetric }) {
   const compactChart = useMediaQuery("(max-width: 1100px)");
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [trendRequested, setTrendRequested] = useState(false);
@@ -428,10 +413,6 @@ function ChartView({ payload, metric }) {
     () => lineChartOption(payload.series, compactChart, reduceMotion, metric, showTrend),
     [payload.series, compactChart, reduceMotion, metric, showTrend],
   );
-  const districtOption = useMemo(
-    () => districtChartOption(visibleDistricts, reduceMotion),
-    [visibleDistricts, reduceMotion],
-  );
 
   return (
     <>
@@ -445,9 +426,25 @@ function ChartView({ payload, metric }) {
                 ? "Čára spojuje jednotlivé měsíční hodnoty a přerušuje se tam, kde data chybí."
                 : "Pro zobrazení průměru rozšiřte období alespoň na 13 dostupných měření."}</p>
           </div>
-          <div className="chart-toggle" role="group" aria-label="Zobrazení vývoje">
-            <button type="button" className={!showTrend ? "active" : ""} aria-pressed={!showTrend} onClick={() => setTrendRequested(false)}>Měsíční hodnoty</button>
-            <button type="button" className={showTrend ? "active" : ""} aria-pressed={showTrend} disabled={!trendAvailable} onClick={() => setTrendRequested(true)}>Průměr z 12 měření</button>
+          <div className="chart-controls">
+            <ChartToggle
+              label="Co graf ukazuje"
+              value={metric}
+              onChange={onMetric}
+              options={[
+                { value: "permits-spaces", label: "Oprávnění a místa" },
+                { value: "pressure", label: "Jen oprávnění na místo" },
+              ]}
+            />
+            <ChartToggle
+              label="Zobrazení vývoje"
+              value={showTrend}
+              onChange={setTrendRequested}
+              options={[
+                { value: false, label: "Měsíční hodnoty" },
+                { value: true, label: "Průměr z 12 měření", disabled: !trendAvailable },
+              ]}
+            />
           </div>
         </div>
         <EChart
@@ -455,46 +452,10 @@ function ChartView({ payload, metric }) {
           className="time-chart"
           ariaLabel={metric === "pressure"
             ? "Vývoj počtu parkovacích oprávnění na jedno místo v čase"
-            : "Vývoj počtu parkovacích oprávnění a parkovacích míst v čase"}
+            : "Vývoj počtu parkovacích oprávnění a parkovacích míst v čase, pod ním počet oprávnění na jedno místo"}
         />
       </section>
-      <section className="district-section" aria-labelledby="district-heading">
-        <div className="section-heading">
-          <h2 id="district-heading">Porovnání městských částí</h2>
-          <p>Oprávnění na 1 parkovací místo, {formatMonth(payload.summary?.latest_date)}</p>
-        </div>
-        <div className="district-content">
-          <EChart
-            option={districtOption}
-            className="district-chart"
-            ariaLabel="Porovnání pěti městských částí s nejvyšším počtem oprávnění na parkovací místo"
-          />
-          <table>
-            <caption className="sr-only">Hodnoty pěti městských částí s nejvyšším tlakem na parkování</caption>
-            <thead>
-              <tr>
-                <th scope="col">Městská část</th>
-                <th>Oprávnění</th>
-                <th>Parkovací místa</th>
-                <th>Oprávnění na místo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleDistricts.map((row) => (
-                <tr key={row.district}>
-                  <th scope="row">{row.district.replace(/^P0?/, "Praha ")}</th>
-                  <td>{formatNumber(row.permits)}</td>
-                  <td>{formatNumber(row.spaces)}</td>
-                  <td>{formatRatio(row.permits_per_space)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="data-note">
-          Pozn.: Zahrnuje aktivní oprávnění a veřejná i neveřejná parkovací místa v regulovaných zónách.
-        </p>
-      </section>
+      <DistrictTable districts={visibleDistricts} month={formatMonth(payload.summary?.latest_date)} />
     </>
   );
 }
@@ -536,26 +497,6 @@ function TableView({ payload }) {
             ))}
           </tbody>
         </table>
-      </div>
-    </section>
-  );
-}
-
-function MapView({ onBack }) {
-  return (
-    <section className="map-empty-state">
-      <div>
-        <span className="eyebrow">Mapa se připravuje</span>
-        <h2>Geografický pohled zatím není součástí průzkumníku</h2>
-        <p>
-          Data můžete procházet podle městských částí v grafech a tabulce. Mapu
-          jednotlivých parkovacích úseků doplníme jako samostatný, plnohodnotný pohled.
-        </p>
-        <button type="button" className="primary-action" onClick={onBack}>Zpět ke grafům</button>
-      </div>
-      <div className="map-placeholder" aria-hidden="true">
-        <span>Praha</span>
-        <i /><i /><i /><i /><i />
       </div>
     </section>
   );
@@ -704,7 +645,7 @@ export function App() {
   const handleTabKeyDown = (event) => {
     if (!event.key.startsWith("Arrow")) return;
     event.preventDefault();
-    const views = ["charts", "map", "table"];
+    const views = ["charts", "table"];
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
     const index = (views.indexOf(view) + step + views.length) % views.length;
     const nextView = views[index];
@@ -726,35 +667,19 @@ export function App() {
 
       <main id="explorer">
         <section className="explorer-head">
-          <div>
+          <div className="explorer-title">
             <h1>Vývoj parkování v Praze</h1>
-            <p>Oprávnění, kapacita a tlak v regulovaných zónách</p>
+            <p className="subtitle">Oprávnění, kapacita a tlak v regulovaných zónách</p>
+            <p className="explainer">
+              Sledujte vývoj počtu vydaných oprávnění, dostupné kapacity parkovacích míst
+              a výsledného tlaku. Vyšší hodnota znamená vyšší poptávku po parkování.
+            </p>
           </div>
-          {view === "charts" ? (
-            <label className="metric-select">
-              <span>Metrika</span>
-              <select value={metric} onChange={(event) => setMetric(event.target.value)}>
-                <option value="permits-spaces">Oprávnění a parkovací místa</option>
-                <option value="pressure">Oprávnění na místo</option>
-              </select>
-            </label>
-          ) : (
-            <div className="view-context">
-              <span>Aktivní pohled</span>
-              <strong>{view === "table" ? "Tabulková data" : "Geografický výběr"}</strong>
-            </div>
-          )}
-          <p className="explainer">
-            Sledujte vývoj počtu vydaných oprávnění, dostupné kapacity parkovacích míst
-            a výsledného tlaku. Vyšší hodnota znamená vyšší poptávku po parkování.
-          </p>
+          <div className="view-tabs" role="tablist" aria-label="Zobrazení dat" onKeyDown={handleTabKeyDown}>
+            <button id="view-tab-charts" aria-controls="view-panel" tabIndex={view === "charts" ? 0 : -1} type="button" className={view === "charts" ? "active" : ""} onClick={() => setView("charts")} role="tab" aria-selected={view === "charts"}>Grafy</button>
+            <button id="view-tab-table" aria-controls="view-panel" tabIndex={view === "table" ? 0 : -1} type="button" className={view === "table" ? "active" : ""} onClick={() => setView("table")} role="tab" aria-selected={view === "table"}>Tabulka</button>
+          </div>
         </section>
-
-        <div className="view-tabs" role="tablist" aria-label="Zobrazení dat" onKeyDown={handleTabKeyDown}>
-          <button id="view-tab-charts" aria-controls="view-panel" tabIndex={view === "charts" ? 0 : -1} type="button" className={view === "charts" ? "active" : ""} onClick={() => setView("charts")} role="tab" aria-selected={view === "charts"}>Grafy</button>
-          <button id="view-tab-map" aria-controls="view-panel" tabIndex={view === "map" ? 0 : -1} type="button" className={view === "map" ? "active" : ""} onClick={() => setView("map")} role="tab" aria-selected={view === "map"}>Mapa</button>
-          <button id="view-tab-table" aria-controls="view-panel" tabIndex={view === "table" ? 0 : -1} type="button" className={view === "table" ? "active" : ""} onClick={() => setView("table")} role="tab" aria-selected={view === "table"}>Tabulka</button>
-        </div>
 
         {payload && (
           <div className="sticky-toolbar">
@@ -806,10 +731,9 @@ export function App() {
             {loading && !payload ? <LoadingState /> : null}
             {error ? <ErrorState hasData={hasResults} onRetry={() => setRetryToken((value) => value + 1)} /> : null}
             {hasResults && payload.coverage?.permits_available === false ? <CoverageNotice /> : null}
-            {payload && !hasResults && view !== "map" ? <NoResultsState onReset={resetFilters} /> : null}
-            {hasResults && view === "charts" ? <ChartView payload={payload} metric={metric} /> : null}
+            {payload && !hasResults ? <NoResultsState onReset={resetFilters} /> : null}
+            {hasResults && view === "charts" ? <ChartView payload={payload} metric={metric} onMetric={setMetric} /> : null}
             {hasResults && view === "table" ? <TableView payload={payload} /> : null}
-            {view === "map" ? <MapView onBack={() => setView("charts")} /> : null}
             </div>
           </div>
           {payload ? <InsightPanel payload={payload} filters={effectiveFilters} /> : <aside className="insight-panel" />}

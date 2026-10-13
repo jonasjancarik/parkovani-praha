@@ -32,6 +32,14 @@
 > "Obnovit" returns to the selection the page opens with. These changes postdate
 > the measurements below.
 
+> **Visual pass (2026-10-13):** The layout now departs from the reference on
+> purpose (see `frontend/AGENTS.md`): no map tab, a two-panel main chart
+> without fills or a second axis, quiet filter chips, a single district table,
+> a capped page width, and a separate palette for breakdown charts. Checked in
+> the in-app browser at 1487, 1280, 800 and 375px wide with no horizontal
+> overflow and no new console errors. The fidelity review and findings below
+> describe the earlier, reference-matched layout.
+
 ## Fidelity review
 
 - Layout and spacing: the masthead, three-column introduction, tabs, filter row, chart canvas, district comparison, and insight rail align with the reference hierarchy and proportions. The filter row and address search remain one continuous 98px band both before and after it becomes sticky.

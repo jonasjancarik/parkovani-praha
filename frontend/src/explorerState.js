@@ -6,7 +6,7 @@ export const DEFAULT_FILTERS = {
   zoneTypes: ["MIX", "OST", "RES", "VIS"],
 };
 
-const VALID_VIEWS = new Set(["charts", "map", "table"]);
+const VALID_VIEWS = new Set(["charts", "table"]);
 const VALID_METRICS = new Set(["permits-spaces", "pressure"]);
 
 export function initialStateFromSearch(search) {
