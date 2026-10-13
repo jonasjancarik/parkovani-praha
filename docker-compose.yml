@@ -5,3 +5,6 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3014:8000"
+    environment:
+      # Address search; read from .env next to this file.
+      MAPY_CZ_API_KEY: ${MAPY_CZ_API_KEY:-}

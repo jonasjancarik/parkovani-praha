@@ -38,8 +38,8 @@ Přehled datových souborů:
 - `data_permits_and_spaces.csv` - kombinace předchozích dvou souborů
 
 Po stažení nových dat (`uv run python download.py`) spusťte `./update_data.sh`; zpracuje
-data, nasadí auditované přiřazení oprávnění k úsekům a sestaví
-`data_parking_and_permits.csv`. Podrobnosti viz `docs/parking-data-quality-handoff.md`.
+data, nasadí auditované přiřazení oprávnění k úsekům, sestaví
+`data_parking_and_permits.csv` a uloží aktuální tvary úseků do `zones.geojson`. Podrobnosti viz `docs/parking-data-quality-handoff.md`.
 
 ## Web app (Streamlit)
 
@@ -89,6 +89,31 @@ missing months as gaps. `Průměr z 12 měření` adds a trailing average from t
 latest available observations, while retaining those gaps in the trend line. It
 remains a visual overlay and never replaces API values or CSV exports.
 
+### Address report
+
+`Okolí adresy` (`/?page=address`) shows the paid-parking zones within walking
+distance of an address or of a point picked on the map. For a radius of 100–1500 m
+it reports parking spaces, permits per space, occupancy and compliance, the
+development of capacity, every zone in the circle with its own capacity history,
+the same figures for other radii, and the history of the zone the address lies in.
+The zone list downloads as CSV or GeoJSON, and the page address carries the
+selection, so it can be shared.
+
+Only zones from the same city district as the address are counted. The capacity
+total covers the months for which every zone in the circle has data, so a zone that
+appears later does not look like added capacity; with many zones this period can be
+short, and the page states it under the chart.
+
+The page uses three endpoints: `/api/address/options`, `/api/address/search?q=`
+and `/api/address/report?lon=&lat=&radius=&cast_dne=&label=`. Address search and
+naming a point picked on the map go through Mapy.cz and need `MAPY_CZ_API_KEY`;
+without a working key the search is unavailable and a place can still be picked on
+the map.
+
+Zone shapes come from `data/processed/zones.geojson`, which `./update_data.sh`
+rebuilds from the newest downloaded month (`uv run python web_app/geo.py` on its
+own). The production image contains this file instead of the raw exports.
+
 ### Production container
 
 The production image builds the React frontend and serves it together with the
@@ -105,7 +130,7 @@ the Cloudflare Tunnel route. Verify it with:
 curl http://127.0.0.1:3014/api/health
 ```
 
-Pro hledání podle adresy nastavte `MAPY_CZ_API_KEY`.
+Pro hledání podle adresy nastavte `MAPY_CZ_API_KEY` v souboru `.env`; Compose ho předá kontejneru.
 
 Adresní záložka ve web app nyní umí:
 - najít referenční úsek pro zadanou adresu;

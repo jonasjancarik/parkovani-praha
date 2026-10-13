@@ -26,6 +26,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY web_app/ ./web_app/
 COPY src/ ./src/
 COPY data/processed/data_parking_and_permits.csv ./data/processed/data_parking_and_permits.csv
+COPY data/processed/zones.geojson ./data/processed/zones.geojson
+COPY data/useky_zsj_mapping.csv ./data/useky_zsj_mapping.csv
 COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 
 EXPOSE 8000

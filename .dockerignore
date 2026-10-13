@@ -8,6 +8,8 @@ frontend/dist
 docs
 tests
 data/*
+!data/useky_zsj_mapping.csv
 !data/processed/
 data/processed/*
 !data/processed/data_parking_and_permits.csv
+!data/processed/zones.geojson
