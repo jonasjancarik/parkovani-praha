@@ -1,10 +1,4 @@
 usek,mesic_skoku,verdikt,podezrela_hodnota,kapacita_pred,kapacita_po,aut_pred,aut_po,obsazenost_pred,obsazenost_po,mereni_na_hodnote_pred,mereni_na_hodnote_po,prekryv_tvaru,pomer_plochy,prekresleno_useku_v_mc
-P5-1410,2021-02,pravděpodobná chyba kapacity,"po skoku (dočasná hodnota, vrací se 2022-12-31)",65,245,36,36,0.56,0.15,28,22,1.0,1.0,0
-P5-1410,2022-12,pravděpodobná chyba kapacity,před skokem (návrat k dřívější hodnotě),245,66,47,47,0.19,0.72,22,45,1.0,1.0,0
-P5-1442,2021-02,pravděpodobná chyba kapacity,"po skoku (dočasná hodnota, vrací se 2026-08-31)",27,117,27,29,1.0,0.25,28,66,1.0,1.0,0
-P5-1442,2026-08,pravděpodobná chyba kapacity,před skokem (návrat k dřívější hodnotě),117,27,23,27,0.2,1.0,66,1,1.0,1.0,0
-P6-0421,2026-08,pravděpodobná chyba kapacity,před skokem (návrat k dřívější hodnotě),196,106,65,65,0.33,0.62,5,1,1.0,1.0,0
-P6-0421,2026-03,pravděpodobná chyba kapacity,"po skoku (dočasná hodnota, vrací se 2026-08-31)",106,195,76,70,0.72,0.36,89,5,1.0,1.0,0
 P6-1144,2018-12,pravděpodobná chyba kapacity,nelze určit,69,4,4,4,0.06,1.0,3,92,1.0,1.0,0
 P4-1621,2020-12,pravděpodobná chyba kapacity,nelze určit,100,158,110,97,1.1,0.62,26,69,1.0,1.0,0
 P8-0260,2019-01,pravděpodobná chyba kapacity,před skokem (obsazenost 256%),34,84,87,86,2.56,1.02,4,91,1.0,1.0,0
