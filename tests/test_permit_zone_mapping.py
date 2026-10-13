@@ -302,3 +302,46 @@ def test_history_audit_rejects_an_explicit_empty_month_range(tmp_path: Path) -> 
             parking_csv=tmp_path / "parking.csv",
             months=[],
         )
+
+
+def test_distance_limit_excludes_far_buildings_and_reports_their_permits(
+    tmp_path: Path,
+) -> None:
+    buildings_dir = tmp_path / "buildings"
+    zones_dir = tmp_path / "zones"
+    buildings_dir.mkdir()
+    zones_dir.mkdir()
+    # The zone covers 13.99-14.01 E; the building at 14.1 E is roughly 6 km away.
+    payload = {
+        "features": [
+            {
+                "properties": {
+                    "CODE": code,
+                    "XSUM": permits,
+                    "GraphData": f"[{permits},0,0,0,0,0,0,0]",
+                    "GraphLegend": "[R,V,A,P,C,E,O,S]",
+                },
+                "geometry": {"type": "Point", "coordinates": [lon, 50.0]},
+            }
+            for code, permits, lon in ((1, 3, 14.0), (2, 5, 14.1))
+        ]
+    }
+    (buildings_dir / "PO_202606M_TR.json").write_text(json.dumps(payload))
+    _write_zone_export(zones_dir / "P01-OB_202606D_NA.json", "P1-A")
+    parking_csv = tmp_path / "parking.csv"
+    parking_csv.write_text("date,kod_useku\n2026-06-30,P1-A\n", encoding="utf-8")
+
+    result = audit_history(
+        buildings_dir=buildings_dir,
+        zones_dir=zones_dir,
+        parking_csv=parking_csv,
+        max_distance_m=500,
+    )
+
+    assert result.candidate["POP_CELKEM"].sum() == 3
+    assert result.mapping["excluded_by_distance"].tolist() == [False, True]
+    month = result.report["monthly_reports"][0]
+    assert month["excluded_by_distance_totals"]["POP_CELKEM"] == 5
+    assert month["reconciled"]
+    assert result.report["structural_gates"]["all_monthly_totals_reconciled"]
+    assert result.report["spatial_review"]["excluded_by_distance_permits"] == 5

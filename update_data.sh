@@ -7,6 +7,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Buildings farther than this from every active zone are left out (see manifest).
+MAX_DISTANCE_M="${MAX_DISTANCE_M:-500}"
 TMP=/tmp/parkovani-permit-candidate
 mkdir -p "$TMP"
 
@@ -15,6 +17,7 @@ uv run python -m src.permit_zone_mapping audit-history \
   --candidate-output "$TMP/candidate.csv" \
   --mapping-output "$TMP/mapping.csv" \
   --manifest-output "$TMP/manifest.json" \
+  --max-distance-m "$MAX_DISTANCE_M" \
   --dry-run --strict
 
 cp "$TMP/candidate.csv" data/processed/data_permits_by_zone.csv

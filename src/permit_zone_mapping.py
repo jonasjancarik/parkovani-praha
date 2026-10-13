@@ -38,7 +38,7 @@ OUTPUT_PERMIT_COLUMNS = ["POP_CELKEM", *PERMIT_COLUMNS.values()]
 ZONE_FILE_RE = re.compile(r"^(P\d{2})-OB_(\d{6})([DNPWSX])_NA\.json$")
 ZONE_VARIANT_PRIORITY = {code: index for index, code in enumerate("DNWXPS")}
 BUILDING_FILE_RE = re.compile(r"^PO_(\d{6})M_TR\.json$")
-ALGORITHM_VERSION = "2"
+ALGORITHM_VERSION = "3"
 
 
 @dataclass(frozen=True)
@@ -288,6 +288,7 @@ def audit_month(
     parking_csv: Path,
     legacy_mapping_csv: Path | None = None,
     active_codes_for_month: set[str] | None = None,
+    max_distance_m: float | None = None,
 ) -> MappingAudit:
     buildings = load_month_buildings(buildings_dir, month)
     active_codes = (
@@ -299,9 +300,17 @@ def audit_month(
         raise ValueError(f"Parking data contain no active zones for {month}")
     zones = load_month_zones(zones_dir, month, active_codes)
     mapping, tie_expansions = map_buildings_to_active_zones(buildings, zones)
-    candidate = aggregate_mapped_permits(mapping, month)
+    # Buildings farther from every active zone than the approved limit are left
+    # out of the candidate on purpose; their permits are reported, never lost silently.
+    if max_distance_m is None:
+        mapping["excluded_by_distance"] = False
+    else:
+        mapping["excluded_by_distance"] = mapping["distance_m"].gt(max_distance_m)
+    excluded = mapping[mapping["excluded_by_distance"]]
+    candidate = aggregate_mapped_permits(mapping[~mapping["excluded_by_distance"]], month)
     source_totals = _totals(buildings)
     candidate_totals = _totals(candidate)
+    excluded_totals = _totals(excluded)
     inactive_targets = sorted(set(mapping["usek_code"]).difference(active_codes))
 
     changed_assignments = None
@@ -349,7 +358,10 @@ def audit_month(
         "inactive_targets": inactive_targets,
         "source_totals": source_totals,
         "candidate_totals": candidate_totals,
-        "reconciled": source_totals == candidate_totals,
+        "excluded_by_distance_buildings": len(excluded),
+        "excluded_by_distance_totals": excluded_totals,
+        "reconciled": source_totals
+        == {k: candidate_totals[k] + excluded_totals[k] for k in source_totals},
         "changed_legacy_assignments": changed_assignments,
         "legacy_shared_buildings": legacy_shared_buildings,
         "legacy_change_share": (
@@ -431,6 +443,7 @@ def audit_history(
     parking_csv: Path,
     legacy_mapping_csv: Path | None = None,
     months: Iterable[str] | None = None,
+    max_distance_m: float | None = None,
 ) -> MappingAudit:
     """Audit all requested building months and return one draft release manifest."""
 
@@ -485,6 +498,7 @@ def audit_history(
             parking_csv=parking_csv,
             legacy_mapping_csv=legacy_mapping_csv,
             active_codes_for_month=active_by_month[month],
+            max_distance_m=max_distance_m,
         )
         monthly_inputs[-1]["coordinate_fallback_exports"] = [
             _file_record(_building_file(buildings_dir, source_month))
@@ -530,6 +544,7 @@ def audit_history(
                 "tie_kind",
                 "previous_usek_code",
                 "changed_from_previous_month",
+                "excluded_by_distance",
                 *OUTPUT_PERMIT_COLUMNS,
             ]
         )
@@ -552,6 +567,14 @@ def audit_history(
     spatial_review = {
         "status": "required",
         "approved_by": None,
+        "max_distance_m": max_distance_m,
+        "excluded_by_distance_buildings": sum(
+            report["excluded_by_distance_buildings"] for report in monthly_reports
+        ),
+        "excluded_by_distance_permits": sum(
+            report["excluded_by_distance_totals"]["POP_CELKEM"]
+            for report in monthly_reports
+        ),
         "nearest_fallback_assignments": sum(
             report["nearest_fallbacks"] for report in monthly_reports
         ),
@@ -594,6 +617,7 @@ def audit_history(
             "metric_crs": PRAGUE_METRIC_CRS,
             "method_order": ["polygon_intersection", "nearest_active_zone"],
             "tie_break": "lexicographically_smallest_zone_code",
+            "max_distance_m": max_distance_m,
         },
         "coverage": {
             "requested_months": requested_months,
@@ -671,6 +695,11 @@ def main() -> None:
         type=Path,
         default=Path("data/buildings_useky_mapping.csv"),
     )
+    parser.add_argument(
+        "--max-distance-m",
+        type=float,
+        help="Leave out buildings farther than this from every active zone",
+    )
     parser.add_argument("--candidate-output", type=Path, required=True)
     parser.add_argument("--mapping-output", type=Path)
     parser.add_argument("--report-output", type=Path)
@@ -693,6 +722,7 @@ def main() -> None:
             zones_dir=args.zones_dir,
             parking_csv=args.parking_csv,
             legacy_mapping_csv=args.legacy_mapping_csv,
+            max_distance_m=args.max_distance_m,
         )
         result.report["algorithm_version"] = ALGORITHM_VERSION
         result.report["outputs"] = {
@@ -724,6 +754,7 @@ def main() -> None:
         parking_csv=args.parking_csv,
         legacy_mapping_csv=args.legacy_mapping_csv,
         months=months,
+        max_distance_m=args.max_distance_m,
     )
     result.report["outputs"].update(
         {

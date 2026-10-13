@@ -290,3 +290,16 @@ starého mapování, proto po stažení nových dat spouštějte `./update_data.
 spustí `process.py`, `audit-history --strict`, nasadí kandidáta a spustí
 `join.py`. Při nesplněné strukturální bráně skončí chybou dřív, než kandidáta
 nasadí.
+
+### Limit vzdálenosti 500 m
+
+Budovy, které jsou od všech aktivních úseků dál než 500 m, se do kandidáta
+nezapočítávají (`--max-distance-m`, výchozí hodnota v `update_data.sh`; lze
+přepsat proměnnou `MAX_DISTANCE_M`). Jde o 238 951 přiřazení budova–měsíc s
+455 894 oprávněními, tedy přibližně 2 % všech oprávnění; v červnu 2026 je to
+4 944 z 228 529 oprávnění (2 384 budov). Takto vynechaná oprávnění se nikam
+nepřičítají, ale kontrola součtů je počítá: zdroj = kandidát + vynecháno. Počty
+po měsících jsou v manifestu (`excluded_by_distance_*`) a v mapovacím souboru
+ve sloupci `excluded_by_distance`. Městské a obvodní součty oprávnění jsou proto
+od této verze záměrně nižší než součty ve zdrojových exportech budov.
+Prostorové schválení tím zůstává otevřené pro remízy a náhradní souřadnice.
