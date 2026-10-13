@@ -5,7 +5,8 @@ Two independent signals are compared for every jump: the number of parked cars
 capacity that multiplies while the shape and the number of cars stay the same is
 a wrong denominator; a jump that comes with a new shape is a redrawn zone.
 
-The list is for manual review. Nothing here changes the processed data.
+process.py corrects the jumps that `plan_corrections` finds beyond doubt. Run as a
+script, this module only writes the list of jumps that remain in the processed data.
 """
 
 from __future__ import annotations
@@ -53,6 +54,8 @@ class StepSettings:
     area_match_tolerance: float = 0.50
     # Occupancy above this means the capacity on that side is too low to be true.
     overfull_occupancy: float = 1.20
+    # Occupancy above this cannot be real, which proves the capacity is wrong.
+    impossible_occupancy: float = 1.50
 
 
 def monthly_capacity(
@@ -63,19 +66,21 @@ def monthly_capacity(
     capacity_col: str = "parkovacich_mist_v_zps",
     occupancy_col: str = "obsazenost",
     occupancy_scale: float = 1.0,
+    total_col: str = "parkovacich_mist_celkem",
 ) -> pd.DataFrame:
-    """One row per zone and month: capacity and the implied number of parked cars."""
+    """One row per zone and month: capacity, total spaces and implied parked cars."""
     rows = pd.DataFrame(
         {
             "code": df[code_col],
             "date": pd.to_datetime(df[date_col]),
             "capacity": pd.to_numeric(df[capacity_col], errors="coerce"),
+            "total": pd.to_numeric(df[total_col], errors="coerce"),
         }
     )
     occupancy = pd.to_numeric(df[occupancy_col], errors="coerce") / occupancy_scale
     rows["cars"] = rows["capacity"] * occupancy
     return (
-        rows.groupby(["code", "date"], as_index=False)[["capacity", "cars"]]
+        rows.groupby(["code", "date"], as_index=False)[["capacity", "total", "cars"]]
         .median()
         .sort_values(["code", "date"])
         .reset_index(drop=True)
@@ -99,6 +104,7 @@ def find_capacity_steps(monthly: pd.DataFrame, settings: StepSettings = StepSett
         dates = zone["date"].to_numpy()
         capacity = zone["capacity"].to_numpy(dtype=float)
         cars = zone["cars"].to_numpy(dtype=float)
+        total = zone["total"].to_numpy(dtype=float)
         for index in range(1, len(capacity)):
             before, after = capacity[index - 1], capacity[index]
             low, high = sorted((before, after))
@@ -128,6 +134,11 @@ def find_capacity_steps(monthly: pd.DataFrame, settings: StepSettings = StepSett
                     "previous_date": pd.Timestamp(dates[index - 1]),
                     "capacity_before": before,
                     "capacity_after": after,
+                    "total_before": total[index - 1],
+                    "total_after": total[index],
+                    # First and last observation of the values on either side.
+                    "before_start": pd.Timestamp(dates[start]),
+                    "after_end": pd.Timestamp(dates[end]),
                     "cars_before": cars_before,
                     "cars_after": cars_after,
                     "cars_stable": bool(abs(cars_after - cars_before) <= cars_tolerance),
@@ -244,6 +255,47 @@ def classify_steps(steps: pd.DataFrame, settings: StepSettings = StepSettings())
     )
 
 
+def plan_corrections(steps: pd.DataFrame, settings: StepSettings = StepSettings()) -> pd.DataFrame:
+    """Periods whose capacity is wrong beyond doubt, with the value to use instead.
+
+    Two cases qualify, both only for a zone whose shape and number of parked cars
+    did not change across the jump: a value that later returns to the old one,
+    and a value under which occupancy would be impossible while the other side
+    of the jump is plausible. Everything else is left as the source reports it.
+    """
+    columns = ["code", "start_date", "end_date", "wrong_zps", "right_zps", "right_total", "reason"]
+    if steps.empty:
+        return pd.DataFrame(columns=columns)
+    likely = steps[steps["verdict"] == LIKELY_ERROR]
+    by_key = {(row.code, row.date): row for row in likely.itertuples()}
+    plans = []
+    for row in likely.itertuples():
+        if pd.notna(row.reverts_on):
+            back = by_key.get((row.code, row.reverts_on))
+            if back is None:
+                continue
+            plans.append(
+                (row.code, row.date, row.after_end, row.capacity_after, back.capacity_after,
+                 back.total_after, "dočasná hodnota, která se vrátila; tvar úseku i počet aut beze změny")
+            )
+            continue
+        if row.returns_to_earlier:
+            continue
+        occupancy_before = row.cars_before / max(row.capacity_before, 1.0)
+        occupancy_after = row.cars_after / max(row.capacity_after, 1.0)
+        if occupancy_before > settings.impossible_occupancy and occupancy_after <= settings.overfull_occupancy:
+            plans.append(
+                (row.code, row.before_start, row.previous_date, row.capacity_before, row.capacity_after,
+                 row.total_after, f"obsazenost {occupancy_before:.0%} při této kapacitě; tvar úseku i počet aut beze změny")
+            )
+        elif occupancy_after > settings.impossible_occupancy and occupancy_before <= settings.overfull_occupancy:
+            plans.append(
+                (row.code, row.date, row.after_end, row.capacity_after, row.capacity_before,
+                 row.total_before, f"obsazenost {occupancy_after:.0%} při této kapacitě; tvar úseku i počet aut beze změny")
+            )
+    return pd.DataFrame(plans, columns=columns)
+
+
 def review_table(steps: pd.DataFrame) -> pd.DataFrame:
     """The list as it is saved: Czech headings, rounded values."""
     occupancy_before = steps["cars_before"] / steps["capacity_before"].clip(lower=1)
@@ -269,8 +321,14 @@ def review_table(steps: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def build_review(parking: pd.DataFrame, zones_dir: Path, settings: StepSettings = StepSettings()) -> pd.DataFrame:
-    steps = find_capacity_steps(monthly_capacity(parking), settings)
+def build_review(
+    parking: pd.DataFrame,
+    zones_dir: Path,
+    settings: StepSettings = StepSettings(),
+    **columns: str | float,
+) -> pd.DataFrame:
+    """Jumps with shape evidence and a verdict; `columns` name the input columns."""
+    steps = find_capacity_steps(monthly_capacity(parking, **columns), settings)
     if steps.empty:
         return steps
     return classify_steps(add_shape_evidence(steps, zones_dir), settings)
@@ -287,7 +345,7 @@ def main() -> None:
 
     parking = pd.read_csv(
         args.parking,
-        usecols=["kod_useku", "date", "parkovacich_mist_v_zps", "obsazenost"],
+        usecols=["kod_useku", "date", "parkovacich_mist_v_zps", "parkovacich_mist_celkem", "obsazenost"],
         low_memory=False,
     )
     steps = build_review(parking, args.zones)

@@ -306,7 +306,8 @@ Detektor je porovnává jen s předchozími 12 souvislými měsíci zvlášť pr
 úsek a část dne a podezřelé pohyby zapíše do
 `data/processed/data_parking_anomaly_report.json`.
 
-Automatická oprava se týká pouze dočasných chyb jmenovatele kapacity, u kterých
+Automatická oprava se týká pouze kapacity. Vedle skoků popsaných níže opravuje
+dočasné chyby jmenovatele, u kterých
 souhlasí oba kapacitní sloupce, všechny dostupné části dne, souvislé období před
 i po chybě, stabilní typ zóny a zachovaný počet obsazených míst. Před změnou
 kapacity se uloží zdrojový počet obsazených míst a obsazenost se poté přepočítá
@@ -326,41 +327,33 @@ Pro kontrolní export bez korekcí lze použít `parking_no_anomaly`. Zapíše h
 režim záměrně nevynucuje produkční kvalitativní brány a nemá se publikovat jako
 hlavní dataset.
 
-#### Seznam velkých skoků kapacity k ruční kontrole
+#### Skoky kapacity: co se opravuje a co ne
 
-`uv run python -m src.capacity_steps` (spouští ho i `./update_data.sh`) vypíše do
-`data/processed/data_parking_capacity_steps.csv` každý skok kapacity úseku mezi
-dvěma sousedními měřeními o alespoň 50 % a 20 míst. Data nemění. U každého skoku
-porovná dvě nezávislé věci: počet zaparkovaných aut (kapacita × obsazenost) a tvar
-úseku v exportech z obou měsíců.
+Zpracování projde každý skok kapacity úseku mezi dvěma sousedními měřeními o
+alespoň 50 % a 20 míst (`src/capacity_steps.py`) a porovná dvě nezávislé věci:
+počet zaparkovaných aut (kapacita × obsazenost) a tvar úseku v exportech z obou
+měsíců. Skok se opraví jen tehdy, když tvar i počet aut zůstaly stejné a zároveň
+platí jedno z těchto dvou:
 
-- `pravděpodobná chyba kapacity` – tvar i počet aut zůstaly stejné, změnil se jen
-  počet míst. Sloupec `podezrela_hodnota` říká, která strana skoku je nejspíš
-  špatně: dočasná hodnota, která se později vrátí, nebo ta, při které by obsazenost
-  přesáhla 120 %. Jinak uvádí `nelze určit`.
-- `tvar stejný, změnil se i počet aut` – může jít o skutečnou změnu v ulici.
-- `úsek překreslen, …` – úsek má nový tvar, kapacita se změnila oprávněně. Sloupec
-  `prekresleno_useku_v_mc` ukazuje, kolik úseků téže městské části se ten měsíc
-  překreslilo; vysoké číslo znamená nové sčítání celé oblasti.
+- hodnota se později vrátila na původní (bez ohledu na to, jak dlouho trvala a
+  jestli úsek mezitím změnil typ),
+- při hodnotě na jedné straně skoku by obsazenost přesáhla 150 %, zatímco na druhé
+  straně nepřesahuje 120 %.
 
-#### Ručně potvrzené opravy kapacity
-
-Chyby, které automatická oprava neuzná (trvají příliš dlouho, úsek mezitím změnil
-typ nebo se hodnota vrátila teprve nedávno), se opravují podle
-`data/confirmed_capacity_corrections.csv`. Každý řádek je jedno rozhodnutí
-člověka: úsek, první a poslední měsíc chyby (`od`, `do`, včetně), chybná hodnota
-ze zdroje (`puvodni_mist_v_zps`), správné počty míst a zdůvodnění.
-
-Oprava se použije jen na řádky, které chybnou hodnotu stále obsahují (s tolerancí
-10 % nebo 3 místa). Když TSK zdroj opraví, řádek v souboru přestane cokoli měnit a
-zpracování na to upozorní v logu. Obsazenost se přepočítá na opravenou kapacitu,
-takže počet zaparkovaných aut zůstává podle zdroje. Použité opravy včetně počtu
+Chybná hodnota se nahradí tou z druhé strany skoku a obsazenost se přepočítá, takže
+počet zaparkovaných aut zůstává podle zdroje. Použité opravy s důvodem a počtem
 změněných řádků jsou v `data_parking_anomaly_report.json` pod
-`capacity_corrections.confirmed_corrections`.
+`capacity_corrections.jump_corrections`. Kontrolní export `parking_no_anomaly` je
+nepoužívá.
 
-Kandidáty na nové řádky dává seznam skoků kapacity výše. Do souboru patří jen
-případy, kde je správná hodnota doložená; kontrolní export `parking_no_anomaly`
-tyto opravy nepoužívá.
+Ostatní skoky zůstávají tak, jak je uvádí zdroj. Překreslený úsek je skutečná změna.
+Trvalá změna při stejném tvaru a stejném počtu aut může být také skutečná, například
+když se část stání převede do jiného režimu, a z čísel nejde poznat, která hodnota je
+správná. Obsazenost mezi 100 a 150 % je v datech běžná a jako důkaz chyby nestačí.
+
+`uv run python -m src.capacity_steps` (spouští ho i `./update_data.sh`) zapíše do
+`data/processed/data_parking_capacity_steps.csv` skoky, které ve zpracovaných datech
+zůstaly, s verdiktem a podklady. Slouží jako záznam, ne jako úkol ke kontrole.
 
 Otevřené datové problémy, blokátory publikace a doporučený cíl další práce
 shrnuje [předání k datové kvalitě](docs/parking-data-quality-handoff.md).

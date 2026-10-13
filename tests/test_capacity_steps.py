@@ -29,6 +29,7 @@ def zone_rows(code: str, capacities: list[float], cars: list[float], start: str 
             "date": month,
             "cast_dne": cast,
             "parkovacich_mist_v_zps": capacity,
+            "parkovacich_mist_celkem": capacity + 5,
             "obsazenost": parked / capacity,
         }
         for month, capacity, parked in zip(months, capacities, cars)
@@ -118,32 +119,82 @@ def test_verdict_combines_shape_and_cars() -> None:
     assert result.loc["P1-ERR", "redrawn_in_district"] == 0
 
 
-def test_confirmed_correction_keeps_the_number_of_parked_cars(tmp_path) -> None:
-    from src.parking_cleanup import (
-        apply_confirmed_capacity_corrections,
-        load_confirmed_capacity_corrections,
+def reviewed(rows: list[dict], overlap: float = 1.0) -> pd.DataFrame:
+    steps = steps_for(rows)
+    return classify_steps(steps.assign(shape_overlap=overlap, area_ratio=1.0))
+
+
+def test_plan_corrects_a_value_that_returned() -> None:
+    from src.capacity_steps import plan_corrections
+
+    rows = zone_rows("P5-1", [65, 65, 66, 245, 245, 245, 66, 66], [36, 38, 37, 36, 40, 41, 44, 45])
+
+    plan = plan_corrections(reviewed(rows))
+
+    assert len(plan) == 1
+    correction = plan.iloc[0]
+    assert (correction["start_date"], correction["end_date"]) == (
+        pd.Timestamp("2024-04-30"),
+        pd.Timestamp("2024-06-30"),
+    )
+    assert (correction["wrong_zps"], correction["right_zps"]) == (245, 66)
+    # A redrawn zone is a real change, whatever the numbers do.
+    assert plan_corrections(reviewed(rows, overlap=0.5)).empty
+
+
+def test_plan_corrects_only_impossible_occupancy() -> None:
+    from src.capacity_steps import plan_corrections
+
+    rows = (
+        # 26 cars on 11 spaces cannot be right; 34 spaces afterwards can.
+        zone_rows("P6-LOW", [11, 34, 34, 34], [26, 28, 27, 28])
+        # 53 cars on 39 spaces is 136 %, which the data show often enough.
+        + zone_rows("P2-FULL", [64, 64, 39, 39], [53, 53, 53, 54])
+        # Both sides are plausible, so nothing says which one is wrong.
+        + zone_rows("P4-OPEN", [100, 100, 158, 158], [90, 92, 91, 93])
     )
 
-    path = tmp_path / "corrections.csv"
-    path.write_text(
-        "kod_useku,od,do,puvodni_mist_v_zps,mist_v_zps,mist_celkem,duvod\n"
-        'P5-1,2024-02,2024-03,245,66,70,"zkouška"\n',
-        encoding="utf-8",
+    plan = plan_corrections(reviewed(rows))
+
+    assert plan["code"].tolist() == ["P6-LOW"]
+    correction = plan.iloc[0]
+    assert (correction["start_date"], correction["end_date"]) == (
+        pd.Timestamp("2024-01-31"),
+        pd.Timestamp("2024-01-31"),
+    )
+    assert (correction["wrong_zps"], correction["right_zps"]) == (11, 34)
+
+
+def test_correction_keeps_the_number_of_parked_cars() -> None:
+    from src.parking_cleanup import apply_capacity_corrections
+
+    corrections = pd.DataFrame(
+        [
+            {
+                "code": "P5-1",
+                "start_date": pd.Timestamp("2024-02-29"),
+                "end_date": pd.Timestamp("2024-03-31"),
+                "wrong_zps": 245.0,
+                "right_zps": 66.0,
+                "right_total": 70.0,
+                "reason": "zkouška",
+            }
+        ]
     )
     source = pd.DataFrame(
         {
             "CODE": ["P5-1", "P5-1", "P5-1", "P5-1", "P5-2"],
             "date": pd.to_datetime(["2024-01-31", "2024-02-29", "2024-03-31", "2024-04-30", "2024-02-29"]),
-            # March already carries the right value, as if the source had been fixed.
+            # March does not carry the wrong value, so it is left alone.
             "PS_ZPS": [65, 245, 66, 66, 245],
             "CELKEM_PS": [70, 250, 70, 70, 250],
             "Obs": [60, 12, 50, 55, 12],
         }
     )
 
-    corrected, records = apply_confirmed_capacity_corrections(
+    corrected, records = apply_capacity_corrections(
         source,
-        load_confirmed_capacity_corrections(path),
+        corrections,
         code_col="CODE",
         date_col="date",
         zps_capacity_col="PS_ZPS",
@@ -152,8 +203,9 @@ def test_confirmed_correction_keeps_the_number_of_parked_cars(tmp_path) -> None:
     )
 
     assert corrected["PS_ZPS"].tolist() == [65, 66, 66, 66, 245]
+    assert corrected["PS_ZPS"].dtype == source["PS_ZPS"].dtype
     assert corrected["CELKEM_PS"].tolist() == [70, 70, 70, 70, 250]
     # 12 % of 245 spaces is 29.4 cars, which is 44.5 % of 66 spaces.
     assert round(corrected.loc[1, "Obs"], 1) == 44.5
     assert corrected.loc[[0, 2, 3, 4], "Obs"].tolist() == [60, 50, 55, 12]
-    assert (records[0]["rows_corrected"], records[0]["rows_left_unchanged"]) == (1, 1)
+    assert records[0]["rows_corrected"] == 1

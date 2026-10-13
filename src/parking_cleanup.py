@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Iterable
 
 import numpy as np
@@ -406,36 +405,7 @@ def _variants_agree(
     return True
 
 
-CONFIRMED_CORRECTION_COLUMNS = [
-    "kod_useku",
-    "od",
-    "do",
-    "puvodni_mist_v_zps",
-    "mist_v_zps",
-    "mist_celkem",
-    "duvod",
-]
-
-
-def load_confirmed_capacity_corrections(path: Path | str) -> pd.DataFrame:
-    """Read the hand-reviewed capacity corrections; months are inclusive."""
-    corrections = pd.read_csv(path, dtype={"kod_useku": str, "od": str, "do": str})
-    missing = set(CONFIRMED_CORRECTION_COLUMNS).difference(corrections.columns)
-    if missing:
-        raise ValueError(
-            "Confirmed capacity corrections lack columns: " + ", ".join(sorted(missing))
-        )
-    corrections["start_date"] = pd.to_datetime(corrections["od"] + "-01") + pd.offsets.MonthEnd(0)
-    corrections["end_date"] = pd.to_datetime(corrections["do"] + "-01") + pd.offsets.MonthEnd(0)
-    if (corrections["end_date"] < corrections["start_date"]).any():
-        raise ValueError("Confirmed capacity correction ends before it starts")
-    numeric = ["puvodni_mist_v_zps", "mist_v_zps", "mist_celkem"]
-    if corrections[numeric].isna().any().any() or (corrections[numeric] <= 0).any().any():
-        raise ValueError("Confirmed capacity corrections need positive capacities")
-    return corrections
-
-
-def apply_confirmed_capacity_corrections(
+def apply_capacity_corrections(
     df: pd.DataFrame,
     corrections: pd.DataFrame,
     *,
@@ -447,11 +417,12 @@ def apply_confirmed_capacity_corrections(
     match_rel_tolerance: float = 0.10,
     match_abs_tolerance: float = 3.0,
 ) -> tuple[pd.DataFrame, list[dict]]:
-    """Replace capacities that a person confirmed to be wrong in the source.
+    """Replace capacities that the jump review found to be wrong in the source.
 
-    Only rows that still carry the reviewed wrong value are changed, so a
-    correction stops applying once the source is fixed. Occupancy is rebased so
-    that the number of parked cars stays what the source reported.
+    `corrections` has one row per zone and period: code, start_date, end_date
+    (inclusive), wrong_zps, right_zps, right_total and reason. Only rows that
+    carry the wrong value are changed. Occupancy is rebased so that the number
+    of parked cars stays what the source reported.
     """
     result = df.copy()
     dates = pd.to_datetime(result[date_col])
@@ -462,34 +433,37 @@ def apply_confirmed_capacity_corrections(
     records = []
     for correction in corrections.itertuples():
         in_period = (
-            (result[code_col] == correction.kod_useku)
+            (result[code_col] == correction.code)
             & (dates >= correction.start_date)
             & (dates <= correction.end_date)
         )
-        tolerance = max(
-            match_abs_tolerance, correction.puvodni_mist_v_zps * match_rel_tolerance
-        )
-        matches = in_period & ((zps - correction.puvodni_mist_v_zps).abs() <= tolerance)
+        tolerance = max(match_abs_tolerance, correction.wrong_zps * match_rel_tolerance)
+        matches = in_period & ((zps - correction.wrong_zps).abs() <= tolerance)
         result.loc[matches, occupancy_col] = (
-            occupancy[matches] * zps[matches] / correction.mist_v_zps
+            occupancy[matches] * zps[matches] / correction.right_zps
         )
-        for column, value in (
-            (zps_capacity_col, correction.mist_v_zps),
-            (total_capacity_col, correction.mist_celkem),
-        ):
-            result.loc[matches, column] = result[column].dtype.type(value)
+        result.loc[matches, zps_capacity_col] = result[zps_capacity_col].dtype.type(
+            correction.right_zps
+        )
+        # Early exports have no total; then there is nothing to put right.
+        if pd.notna(correction.right_total):
+            result.loc[matches, total_capacity_col] = result[
+                total_capacity_col
+            ].dtype.type(correction.right_total)
         records.append(
             {
-                "code": correction.kod_useku,
+                "code": correction.code,
                 "start_date": correction.start_date.date().isoformat(),
                 "end_date": correction.end_date.date().isoformat(),
-                "original_zps": float(correction.puvodni_mist_v_zps),
-                "corrected_zps": float(correction.mist_v_zps),
-                "corrected_total": float(correction.mist_celkem),
-                "reason": correction.duvod,
+                "original_zps": float(correction.wrong_zps),
+                "corrected_zps": float(correction.right_zps),
+                "corrected_total": (
+                    float(correction.right_total)
+                    if pd.notna(correction.right_total)
+                    else None
+                ),
+                "reason": correction.reason,
                 "rows_corrected": int(matches.sum()),
-                # Rows of the period that no longer carry the reviewed wrong value.
-                "rows_left_unchanged": int((in_period & ~matches).sum()),
             }
         )
     return result, records
