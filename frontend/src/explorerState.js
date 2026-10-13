@@ -50,7 +50,7 @@ export function defaultFiltersFor(options) {
 }
 
 export function stateToSearch(filters, view, metric) {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams({ page: "explorer" });
   if (filters.start) params.set("start", filters.start);
   if (filters.end) params.set("end", filters.end);
   if (!sameSelection(filters.castDne, DEFAULT_FILTERS.castDne)) {

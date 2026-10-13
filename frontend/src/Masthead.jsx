@@ -3,7 +3,8 @@ import { IconCalendar } from "@tabler/icons-react";
 import { isoToCzech } from "./format.js";
 
 const PAGES = [
-  { id: "explorer", label: "Datový průzkumník", href: "./" },
+  { id: "overview", label: "Městský přehled", href: "./" },
+  { id: "explorer", label: "Datový průzkumník", href: "./?page=explorer" },
   { id: "address", label: "Okolí adresy", href: "./?page=address" },
 ];
 
@@ -12,7 +13,6 @@ export function Masthead({ page, dataDate }) {
     <header className="masthead">
       <a className="brand" href="./">Parkování Praha</a>
       <nav aria-label="Hlavní navigace">
-        <span className="nav-coming-soon" title="Městský přehled připravujeme">Městský přehled <small>Připravujeme</small></span>
         {PAGES.map((item) => (
           <a
             key={item.id}

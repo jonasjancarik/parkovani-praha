@@ -29,7 +29,7 @@ test("shareable state round-trips filters, view, and metric", () => {
 });
 
 test("the default selection keeps the address short", () => {
-  assert.equal(stateToSearch(DEFAULT_FILTERS, "charts", "permits-spaces"), "");
+  assert.equal(stateToSearch(DEFAULT_FILTERS, "charts", "permits-spaces"), "page=explorer");
   assert.deepEqual(initialStateFromSearch("").filters, DEFAULT_FILTERS);
   assert.deepEqual(
     defaultFiltersFor({ cast_dne: ["noc", "den"], zone_types: ["RES"] }),

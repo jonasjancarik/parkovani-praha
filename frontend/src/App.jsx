@@ -570,6 +570,10 @@ export function App() {
   );
 
   useEffect(() => {
+    document.title = "Datový průzkumník – Parkování Praha";
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
     setRequest((current) => ({ ...current, loading: true }));
     fetch(`/api/explorer?${explorerQuery}`, { signal: controller.signal })
