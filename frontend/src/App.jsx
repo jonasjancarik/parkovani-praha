@@ -388,7 +388,7 @@ function DistrictTable({ districts, month }) {
       </table>
       <p className="data-note">
         Pozn.: Zahrnuje aktivní oprávnění a veřejná i neveřejná parkovací místa v regulovaných zónách.
-        Oprávnění vydaná budovám dál než 500 m od nejbližšího úseku zóny (asi 2 % všech) se do počtů nezapočítávají, takže jsou o něco nižší než ve zdrojových datech TSK.
+        Do počtů se nezapočítávají oprávnění budov dál než 500 m od nejbližšího úseku zóny (asi 2 %) a souhrnné záznamy bez konkrétního místa, zejména ekologická oprávnění vedená na jedné adrese. Součty jsou proto nižší než ve zdrojových datech TSK.
       </p>
     </section>
   );
@@ -544,7 +544,7 @@ function InsightPanel({ payload, filters }) {
               dostupné místo nyní připadá v průměru {formatRatio(summary.permits_per_space)} oprávnění.
             </p>
             <p>
-              Oprávnění vydaná budovám dál než 500 m od nejbližšího úseku zóny (asi 2 % všech) se do počtů nezapočítávají, takže jsou o něco nižší než ve zdrojových datech TSK.
+              Do počtů se nezapočítávají oprávnění budov dál než 500 m od nejbližšího úseku zóny (asi 2 %) a souhrnné záznamy bez konkrétního místa, zejména ekologická oprávnění vedená na jedné adrese. Součty jsou proto nižší než ve zdrojových datech TSK.
             </p>
           </section>
         </>

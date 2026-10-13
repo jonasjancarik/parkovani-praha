@@ -74,6 +74,25 @@ def _point_from_feature(feature: dict) -> Point | None:
     return Point(geometry["coordinates"])
 
 
+def unplaced_record_totals(buildings_dir: Path, month: str) -> dict[str, int]:
+    """Permit totals of export records without a positive building code.
+
+    TSK exports citywide aggregates under code 0; they have no location and are
+    skipped by load_month_buildings, so they are reported separately.
+    """
+    with _building_file(buildings_dir, month).open(encoding="utf-8") as handle:
+        features = json.load(handle).get("features", [])
+    records = [
+        _permit_values(feature.get("properties", {}))
+        for feature in features
+        if int(feature.get("properties", {}).get("CODE") or 0) <= 0
+    ]
+    return {
+        column: sum(record[column] for record in records)
+        for column in OUTPUT_PERMIT_COLUMNS
+    }
+
+
 def load_month_buildings(buildings_dir: Path, month: str) -> gpd.GeoDataFrame:
     current_path = _building_file(buildings_dir, month)
     with current_path.open(encoding="utf-8") as handle:
@@ -289,6 +308,7 @@ def audit_month(
     legacy_mapping_csv: Path | None = None,
     active_codes_for_month: set[str] | None = None,
     max_distance_m: float | None = None,
+    max_building_permits: int | None = None,
 ) -> MappingAudit:
     buildings = load_month_buildings(buildings_dir, month)
     active_codes = (
@@ -306,11 +326,19 @@ def audit_month(
         mapping["excluded_by_distance"] = False
     else:
         mapping["excluded_by_distance"] = mapping["distance_m"].gt(max_distance_m)
-    excluded = mapping[mapping["excluded_by_distance"]]
-    candidate = aggregate_mapped_permits(mapping[~mapping["excluded_by_distance"]], month)
+    # A single export record holding thousands of permits is a citywide bucket
+    # (for example eco permits registered at one address), not a place.
+    if max_building_permits is None:
+        mapping["excluded_aggregate"] = False
+    else:
+        mapping["excluded_aggregate"] = mapping["POP_CELKEM"].gt(max_building_permits)
+    excluded = mapping[mapping["excluded_by_distance"] | mapping["excluded_aggregate"]]
+    aggregate_records = mapping[mapping["excluded_aggregate"]]
+    candidate = aggregate_mapped_permits(mapping.drop(excluded.index), month)
     source_totals = _totals(buildings)
     candidate_totals = _totals(candidate)
     excluded_totals = _totals(excluded)
+    unplaced_totals = unplaced_record_totals(buildings_dir, month)
     inactive_targets = sorted(set(mapping["usek_code"]).difference(active_codes))
 
     changed_assignments = None
@@ -358,8 +386,13 @@ def audit_month(
         "inactive_targets": inactive_targets,
         "source_totals": source_totals,
         "candidate_totals": candidate_totals,
-        "excluded_by_distance_buildings": len(excluded),
-        "excluded_by_distance_totals": excluded_totals,
+        "excluded_by_distance_buildings": int(mapping["excluded_by_distance"].sum()),
+        "excluded_aggregate_records": [
+            {"building_code": int(row.building_code), "permits": int(row.POP_CELKEM)}
+            for row in aggregate_records.itertuples()
+        ],
+        "unplaced_record_totals": unplaced_totals,
+        "excluded_totals": excluded_totals,
         "reconciled": source_totals
         == {k: candidate_totals[k] + excluded_totals[k] for k in source_totals},
         "changed_legacy_assignments": changed_assignments,
@@ -444,6 +477,7 @@ def audit_history(
     legacy_mapping_csv: Path | None = None,
     months: Iterable[str] | None = None,
     max_distance_m: float | None = None,
+    max_building_permits: int | None = None,
 ) -> MappingAudit:
     """Audit all requested building months and return one draft release manifest."""
 
@@ -499,6 +533,7 @@ def audit_history(
             legacy_mapping_csv=legacy_mapping_csv,
             active_codes_for_month=active_by_month[month],
             max_distance_m=max_distance_m,
+            max_building_permits=max_building_permits,
         )
         monthly_inputs[-1]["coordinate_fallback_exports"] = [
             _file_record(_building_file(buildings_dir, source_month))
@@ -545,6 +580,7 @@ def audit_history(
                 "previous_usek_code",
                 "changed_from_previous_month",
                 "excluded_by_distance",
+                "excluded_aggregate",
                 *OUTPUT_PERMIT_COLUMNS,
             ]
         )
@@ -568,11 +604,18 @@ def audit_history(
         "status": "required",
         "approved_by": None,
         "max_distance_m": max_distance_m,
+        "max_building_permits": max_building_permits,
         "excluded_by_distance_buildings": sum(
             report["excluded_by_distance_buildings"] for report in monthly_reports
         ),
-        "excluded_by_distance_permits": sum(
-            report["excluded_by_distance_totals"]["POP_CELKEM"]
+        "excluded_permits": sum(
+            report["excluded_totals"]["POP_CELKEM"] for report in monthly_reports
+        ),
+        "excluded_aggregate_records": sum(
+            len(report["excluded_aggregate_records"]) for report in monthly_reports
+        ),
+        "unplaced_record_permits": sum(
+            report["unplaced_record_totals"]["POP_CELKEM"]
             for report in monthly_reports
         ),
         "nearest_fallback_assignments": sum(
@@ -618,6 +661,7 @@ def audit_history(
             "method_order": ["polygon_intersection", "nearest_active_zone"],
             "tie_break": "lexicographically_smallest_zone_code",
             "max_distance_m": max_distance_m,
+            "max_building_permits": max_building_permits,
         },
         "coverage": {
             "requested_months": requested_months,
@@ -700,6 +744,11 @@ def main() -> None:
         type=float,
         help="Leave out buildings farther than this from every active zone",
     )
+    parser.add_argument(
+        "--max-building-permits",
+        type=int,
+        help="Treat export records with more permits than this as citywide aggregates",
+    )
     parser.add_argument("--candidate-output", type=Path, required=True)
     parser.add_argument("--mapping-output", type=Path)
     parser.add_argument("--report-output", type=Path)
@@ -723,6 +772,7 @@ def main() -> None:
             parking_csv=args.parking_csv,
             legacy_mapping_csv=args.legacy_mapping_csv,
             max_distance_m=args.max_distance_m,
+            max_building_permits=args.max_building_permits,
         )
         result.report["algorithm_version"] = ALGORITHM_VERSION
         result.report["outputs"] = {
@@ -755,6 +805,7 @@ def main() -> None:
         legacy_mapping_csv=args.legacy_mapping_csv,
         months=months,
         max_distance_m=args.max_distance_m,
+        max_building_permits=args.max_building_permits,
     )
     result.report["outputs"].update(
         {

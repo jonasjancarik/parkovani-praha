@@ -341,7 +341,49 @@ def test_distance_limit_excludes_far_buildings_and_reports_their_permits(
     assert result.candidate["POP_CELKEM"].sum() == 3
     assert result.mapping["excluded_by_distance"].tolist() == [False, True]
     month = result.report["monthly_reports"][0]
-    assert month["excluded_by_distance_totals"]["POP_CELKEM"] == 5
+    assert month["excluded_totals"]["POP_CELKEM"] == 5
     assert month["reconciled"]
     assert result.report["structural_gates"]["all_monthly_totals_reconciled"]
-    assert result.report["spatial_review"]["excluded_by_distance_permits"] == 5
+    assert result.report["spatial_review"]["excluded_permits"] == 5
+
+
+def test_aggregate_record_is_excluded_and_unplaced_code_zero_is_reported(
+    tmp_path: Path,
+) -> None:
+    buildings_dir = tmp_path / "buildings"
+    zones_dir = tmp_path / "zones"
+    buildings_dir.mkdir()
+    zones_dir.mkdir()
+    payload = {
+        "features": [
+            {
+                "properties": {
+                    "CODE": code,
+                    "XSUM": permits,
+                    "GraphData": f"[0,0,0,0,0,{permits},0,0]",
+                    "GraphLegend": "[R,V,A,P,C,E,O,S]",
+                },
+                "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+            }
+            for code, permits in ((1, 3), (2, 90000), (0, 7000))
+        ]
+    }
+    (buildings_dir / "PO_202606M_TR.json").write_text(json.dumps(payload))
+    _write_zone_export(zones_dir / "P01-OB_202606D_NA.json", "P1-A")
+    parking_csv = tmp_path / "parking.csv"
+    parking_csv.write_text("date,kod_useku\n2026-06-30,P1-A\n", encoding="utf-8")
+
+    result = audit_history(
+        buildings_dir=buildings_dir,
+        zones_dir=zones_dir,
+        parking_csv=parking_csv,
+        max_building_permits=5000,
+    )
+
+    assert result.candidate["POP_CELKEM"].sum() == 3
+    month = result.report["monthly_reports"][0]
+    assert month["excluded_aggregate_records"] == [
+        {"building_code": 2, "permits": 90000}
+    ]
+    assert month["unplaced_record_totals"]["POP_CELKEM"] == 7000
+    assert month["reconciled"]

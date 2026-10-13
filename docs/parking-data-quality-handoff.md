@@ -303,3 +303,22 @@ po měsících jsou v manifestu (`excluded_by_distance_*`) a v mapovacím soubor
 ve sloupci `excluded_by_distance`. Městské a obvodní součty oprávnění jsou proto
 od této verze záměrně nižší než součty ve zdrojových exportech budov.
 Prostorové schválení tím zůstává otevřené pro remízy a náhradní souřadnice.
+
+### Souhrnné záznamy v exportu budov
+
+Export budov obsahuje záznam, který nese desetitisíce oprávnění najednou:
+budova `21714746` (18 m od úseku P1-0319) držela od roku 2020 stále rostoucí
+počet ekologických oprávnění (17 tisíc v listopadu 2022, 97 tisíc v listopadu
+2025, 164 tisíc v prosinci 2025, což je jednoměsíční výkyv zdroje). V březnu 2026
+dostal záznam kód `0` a ztratil souřadnice, v červenci 2026 má ekologická
+oprávnění nulová. Šlo o souhrn za celé město, ne o místo, a způsoboval falešný
+vrchol v prosinci 2025 i propad v březnu 2026. Ostatní ekologická oprávnění
+v exportu tvoří pod tisícem.
+
+Záznamy s víc než 5 000 oprávněními (`--max-building-permits`, výchozí hodnota v
+`update_data.sh`, proměnná `MAX_BUILDING_PERMITS`) se proto z kandidáta vynechají
+ve všech měsících; nejvyšší běžná budova má kolem 2 700. Vynechání je uvedeno v
+manifestu (`excluded_aggregate_records`), stejně jako součty záznamů s kódem 0,
+které `load_month_buildings` přeskakuje (`unplaced_record_totals`). Řada
+oprávnění je tím plynulá (218 tisíc v prosinci 2025, 221 tisíc v únoru 2026,
+224 tisíc v dubnu 2026).
