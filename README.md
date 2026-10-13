@@ -326,6 +326,23 @@ Pro kontrolní export bez korekcí lze použít `parking_no_anomaly`. Zapíše h
 režim záměrně nevynucuje produkční kvalitativní brány a nemá se publikovat jako
 hlavní dataset.
 
+#### Seznam velkých skoků kapacity k ruční kontrole
+
+`uv run python -m src.capacity_steps` (spouští ho i `./update_data.sh`) vypíše do
+`data/processed/data_parking_capacity_steps.csv` každý skok kapacity úseku mezi
+dvěma sousedními měřeními o alespoň 50 % a 20 míst. Data nemění. U každého skoku
+porovná dvě nezávislé věci: počet zaparkovaných aut (kapacita × obsazenost) a tvar
+úseku v exportech z obou měsíců.
+
+- `pravděpodobná chyba kapacity` – tvar i počet aut zůstaly stejné, změnil se jen
+  počet míst. Sloupec `podezrela_hodnota` říká, která strana skoku je nejspíš
+  špatně: dočasná hodnota, která se později vrátí, nebo ta, při které by obsazenost
+  přesáhla 120 %. Jinak uvádí `nelze určit`.
+- `tvar stejný, změnil se i počet aut` – může jít o skutečnou změnu v ulici.
+- `úsek překreslen, …` – úsek má nový tvar, kapacita se změnila oprávněně. Sloupec
+  `prekresleno_useku_v_mc` ukazuje, kolik úseků téže městské části se ten měsíc
+  překreslilo; vysoké číslo znamená nové sčítání celé oblasti.
+
 Otevřené datové problémy, blokátory publikace a doporučený cíl další práce
 shrnuje [předání k datové kvalitě](docs/parking-data-quality-handoff.md).
 

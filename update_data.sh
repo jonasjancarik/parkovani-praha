@@ -28,3 +28,5 @@ echo "Installed audited permit candidate (manifest: $TMP/manifest.json)"
 uv run python join.py
 # Zone shapes for the address report, taken from the newest downloaded month.
 uv run python web_app/geo.py
+# Large capacity jumps to review by hand (compares car counts and zone shapes).
+uv run python -m src.capacity_steps
