@@ -71,7 +71,7 @@ def zone_rows_for_cast_dne(
     return scoped.drop(columns="_cast_rank", errors="ignore")
 
 
-def zone_capacity_history(
+def zone_filled_history(
     df: pd.DataFrame,
     zone_codes: Sequence[str],
     cast_dne: Optional[str],
@@ -79,6 +79,7 @@ def zone_capacity_history(
     gap_rel_tolerance: float = 0.10,
     gap_abs_tolerance: float = 3.0,
 ) -> pd.DataFrame:
+    """Monthly history per zone with short gaps filled where capacity stayed the same."""
     scoped = zone_rows_for_cast_dne(df, zone_codes, cast_dne)
     if scoped.empty:
         return scoped
@@ -123,7 +124,13 @@ def zone_capacity_history(
         group = group[group[value_col].notna()].reset_index()
         filled_groups.append(group)
 
-    filled = pd.concat(filled_groups, ignore_index=True)
+    return pd.concat(filled_groups, ignore_index=True)
+
+
+def clip_to_common_period(filled: pd.DataFrame) -> pd.DataFrame:
+    """Keep only the months for which every zone in the frame has data."""
+    if filled.empty:
+        return filled
     coverage = filled.groupby("kod_useku")["date"].agg(["min", "max"])
     if coverage.empty:
         return filled
@@ -136,6 +143,26 @@ def zone_capacity_history(
         ].copy()
 
     return filled
+
+
+def zone_capacity_history(
+    df: pd.DataFrame,
+    zone_codes: Sequence[str],
+    cast_dne: Optional[str],
+    value_col: str = "parkovacich_mist_v_zps",
+    gap_rel_tolerance: float = 0.10,
+    gap_abs_tolerance: float = 3.0,
+) -> pd.DataFrame:
+    return clip_to_common_period(
+        zone_filled_history(
+            df,
+            zone_codes,
+            cast_dne,
+            value_col=value_col,
+            gap_rel_tolerance=gap_rel_tolerance,
+            gap_abs_tolerance=gap_abs_tolerance,
+        )
+    )
 
 
 def radius_spaces_series(
