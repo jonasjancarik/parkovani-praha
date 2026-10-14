@@ -21,12 +21,14 @@ test("shareable state round-trips filters, view, and metric", () => {
     sameZones: true,
   };
 
-  const search = stateToSearch(filters, "table", "pressure");
+  const search = stateToSearch(filters, "table", "pressure", false);
   assert.deepEqual(initialStateFromSearch(search), {
     view: "table",
     metric: "pressure",
+    socialAsResidents: false,
     filters,
   });
+  assert.equal(initialStateFromSearch("page=explorer").socialAsResidents, true);
 });
 
 test("the default selection keeps the address short", () => {

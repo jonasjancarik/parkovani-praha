@@ -21,8 +21,9 @@ test("a shared link restores the point, radius and part of the day", () => {
     point: { lon: 14.4035, lat: 50.0755, label: "Štefánikova 12" },
     radius: 800,
     castDne: "noc",
+    socialAsResidents: true,
   });
-  assert.deepEqual(addressStateFromSearch("?page=address&lon=abc"), { point: null, radius: null, castDne: "" });
+  assert.deepEqual(addressStateFromSearch("?page=address&lon=abc"), { point: null, radius: null, castDne: "", socialAsResidents: true });
 });
 
 test("the address keeps default choices out of the link", () => {
@@ -32,8 +33,8 @@ test("the address keeps default choices out of the link", () => {
     "page=address&lon=14.403500&lat=50.075500&label=%C5%A0tef%C3%A1nikova+12",
   );
   assert.equal(
-    addressStateToSearch({ point: null, label: "", radius: 800, castDne: "noc" }, defaults),
-    "page=address&radius=800&time=noc",
+    addressStateToSearch({ point: null, label: "", radius: 800, castDne: "noc", socialAsResidents: false }, defaults),
+    "page=address&radius=800&time=noc&social=separate",
   );
 });
 

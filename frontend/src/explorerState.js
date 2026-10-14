@@ -17,6 +17,7 @@ export function initialStateFromSearch(search) {
   return {
     view: VALID_VIEWS.has(view) ? view : "charts",
     metric: VALID_METRICS.has(metric) ? metric : "permits-spaces",
+    socialAsResidents: params.get("social") !== "separate",
     filters: {
       start: params.get("start") ?? "",
       end: params.get("end") ?? "",
@@ -52,7 +53,7 @@ export function defaultFiltersFor(options) {
   };
 }
 
-export function stateToSearch(filters, view, metric) {
+export function stateToSearch(filters, view, metric, socialAsResidents = true) {
   const params = new URLSearchParams({ page: "explorer" });
   if (filters.start) params.set("start", filters.start);
   if (filters.end) params.set("end", filters.end);
@@ -66,6 +67,7 @@ export function stateToSearch(filters, view, metric) {
   if (filters.sameZones) params.set("same_zones", "true");
   if (view !== "charts") params.set("view", view);
   if (metric !== "permits-spaces") params.set("metric", metric);
+  if (!socialAsResidents) params.set("social", "separate");
   return params.toString();
 }
 

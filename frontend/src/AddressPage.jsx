@@ -322,9 +322,8 @@ function RadiusComparison({ report, onRadius }) {
   );
 }
 
-function ReportSections({ report, label, onRadius }) {
+function ReportSections({ report, label, onRadius, socialAsResidents, onSocialAsResidents }) {
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const [socialAsResidents, setSocialAsResidents] = useState(true);
   const { reference, selection, series, summary } = report;
 
   if (summary.zones === 0) {
@@ -362,7 +361,7 @@ function ReportSections({ report, label, onRadius }) {
               dohromady. Počítáme jen měsíce, kdy máme data ze všech, aby změny nevznikaly
               tím, že nějaký úsek přibyl nebo chybí.
             </p>
-            <SocialToggle value={socialAsResidents} onChange={setSocialAsResidents} />
+            <SocialToggle value={socialAsResidents} onChange={onSocialAsResidents} />
           </div>
           <ReferenceCharts
             series={report.radius_series}
@@ -381,7 +380,7 @@ function ReportSections({ report, label, onRadius }) {
               {reference.inside ? `Úsek ${reference.code}, ve kterém místo leží` : `Nejbližší úsek ${reference.code}`}
             </h2>
             <p>Vývoj jednoho úseku od prvního měření.</p>
-            <SocialToggle value={socialAsResidents} onChange={setSocialAsResidents} />
+            <SocialToggle value={socialAsResidents} onChange={onSocialAsResidents} />
           </div>
           <ReferenceCharts series={reference.series} reduceMotion={reduceMotion} socialAsResidents={socialAsResidents} />
         </section>
@@ -396,6 +395,7 @@ export function AddressPage() {
   const [point, setPoint] = useState(initial.point);
   const [radiusChoice, setRadiusChoice] = useState(initial.radius);
   const [castChoice, setCastChoice] = useState(initial.castDne);
+  const [socialAsResidents, setSocialAsResidents] = useState(initial.socialAsResidents);
   const [query, setQuery] = useState(initial.point?.label ?? "");
   const [search, setSearch] = useState({ loading: false, error: "" });
   const [shareStatus, setShareStatus] = useState("");
@@ -426,11 +426,11 @@ export function AddressPage() {
   useEffect(() => {
     if (!settings) return;
     const params = addressStateToSearch(
-      { point, label: knownLabel, radius, castDne },
+      { point, label: knownLabel, radius, castDne, socialAsResidents },
       { radius: settings.radius.default, castDne: settings.default_cast_dne },
     );
     window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
-  }, [settings, point, knownLabel, radius, castDne]);
+  }, [settings, point, knownLabel, radius, castDne, socialAsResidents]);
 
   useEffect(() => {
     if (!shareStatus) return undefined;
@@ -576,7 +576,13 @@ export function AddressPage() {
 
             {report ? (
               <div className={`address-sections${reportRequest.loading ? " is-refreshing" : ""}`}>
-                <ReportSections report={report} label={label} onRadius={setRadiusChoice} />
+                <ReportSections
+                  report={report}
+                  label={label}
+                  onRadius={setRadiusChoice}
+                  socialAsResidents={socialAsResidents}
+                  onSocialAsResidents={setSocialAsResidents}
+                />
               </div>
             ) : null}
           </>

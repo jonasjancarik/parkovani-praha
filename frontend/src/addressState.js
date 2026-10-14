@@ -23,10 +23,11 @@ export function addressStateFromSearch(search) {
     point: lon == null || lat == null ? null : { lon, lat, label: params.get("label") ?? "" },
     radius: Number.isFinite(radius) ? radius : null,
     castDne: params.get("time") ?? "",
+    socialAsResidents: params.get("social") !== "separate",
   };
 }
 
-export function addressStateToSearch({ point, label, radius, castDne }, defaults) {
+export function addressStateToSearch({ point, label, radius, castDne, socialAsResidents = true }, defaults) {
   const params = new URLSearchParams({ page: "address" });
   if (point) {
     params.set("lon", point.lon.toFixed(6));
@@ -35,6 +36,7 @@ export function addressStateToSearch({ point, label, radius, castDne }, defaults
   }
   if (radius && radius !== defaults.radius) params.set("radius", String(radius));
   if (castDne && castDne !== defaults.castDne) params.set("time", castDne);
+  if (!socialAsResidents) params.set("social", "separate");
   return params.toString();
 }
 

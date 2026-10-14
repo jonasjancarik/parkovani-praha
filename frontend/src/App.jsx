@@ -553,6 +553,7 @@ export function App() {
   const initialState = useMemo(() => initialStateFromSearch(window.location.search), []);
   const [view, setView] = useState(initialState.view);
   const [metric, setMetric] = useState(initialState.metric);
+  const [socialAsResidents, setSocialAsResidents] = useState(initialState.socialAsResidents);
   const [request, setRequest] = useState({ payload: null, error: "", loading: true });
   const [retryToken, setRetryToken] = useState(0);
   const [shareStatus, setShareStatus] = useState("");
@@ -606,9 +607,9 @@ export function App() {
   }, [explorerQuery, retryToken]);
 
   useEffect(() => {
-    const query = stateToSearch(filters, view, metric);
+    const query = stateToSearch(filters, view, metric, socialAsResidents);
     window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
-  }, [filters, metric, view]);
+  }, [filters, metric, view, socialAsResidents]);
 
   const setFilter = (name, value) => setFilters((current) => ({ ...current, [name]: value }));
   const setStart = (value) => setFilters((current) => ({
@@ -726,7 +727,7 @@ export function App() {
           </div>
           {payload ? <InsightPanel payload={payload} filters={effectiveFilters} /> : <aside className="insight-panel" />}
         </div>
-        {hasResults && view === "charts" ? <AnalyticsSections analytics={payload.analytics} /> : null}
+        {hasResults && view === "charts" ? <AnalyticsSections analytics={payload.analytics} socialAsResidents={socialAsResidents} onSocialAsResidents={setSocialAsResidents} /> : null}
       </main>
     </div>
   );
