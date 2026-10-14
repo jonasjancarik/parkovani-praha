@@ -153,6 +153,20 @@ def address_report(
     return payload
 
 
+class FrontendFiles(StaticFiles):
+    """The built frontend; pages are always revalidated, hashed assets are not.
+
+    A cached index.html would keep loading the previous bundle after a deploy,
+    and that bundle may not understand the current API.
+    """
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if not path.startswith("assets/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 FRONTEND_DIST = WEB_APP_DIR.parent / "frontend" / "dist"
 if FRONTEND_DIST.is_dir():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+    app.mount("/", FrontendFiles(directory=FRONTEND_DIST, html=True), name="frontend")

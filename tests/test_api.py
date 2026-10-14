@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 
@@ -68,3 +69,17 @@ def test_overview_reports_the_loaded_parking_data(monkeypatch) -> None:
     assert payload["latest_date"] == "2026-06-30"
     assert payload["city"]["permits_per_space"] == 1.5
     assert payload["city"]["compared_with"] == "2025-06-30"
+
+
+def test_frontend_pages_are_revalidated_but_assets_are_not(tmp_path) -> None:
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<html></html>")
+    (tmp_path / "assets" / "index-abc.js").write_text("")
+    files = api.FrontendFiles(directory=tmp_path, html=True)
+    scope = {"type": "http", "method": "GET", "headers": [], "path": "/"}
+
+    page = asyncio.run(files.get_response("", scope))
+    asset = asyncio.run(files.get_response("assets/index-abc.js", scope))
+
+    assert page.headers["cache-control"] == "no-cache"
+    assert "cache-control" not in asset.headers
