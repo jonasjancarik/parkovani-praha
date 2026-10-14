@@ -352,6 +352,19 @@ function ReportSections({ report, label, onRadius }) {
         </div>
         <CapacityChart series={series} reduceMotion={reduceMotion} />
       </section>
+      {report.radius_series?.length > 0 ? (
+        <section className="address-section" aria-labelledby="circle-heading">
+          <div className="section-heading">
+            <h2 id="circle-heading">Všechny úseky v okruhu dohromady</h2>
+            <p>
+              {zoneCountText(summary.zones)} v okruhu {formatDistance(selection.radius_m)} sečtené
+              dohromady. Počítáme jen měsíce, kdy máme data ze všech, aby změny nevznikaly
+              tím, že nějaký úsek přibyl nebo chybí.
+            </p>
+          </div>
+          <ReferenceCharts series={report.radius_series} reduceMotion={reduceMotion} scope="circle" />
+        </section>
+      ) : null}
       <ZoneTable report={report} label={label} />
       <RadiusComparison report={report} onRadius={onRadius} />
       {reference.in_radius && reference.series.length > 0 ? (

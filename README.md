@@ -112,7 +112,9 @@ carry filters but no page name, still open the explorer.
 `Okolí adresy` (`/?page=address`) shows the paid-parking zones within walking
 distance of an address or of a point picked on the map. For a radius of 100–1500 m
 it reports parking spaces, permits per space, occupancy and compliance, the
-development of capacity, every zone in the circle with its own capacity history,
+development of capacity, the history of permits, occupancy, parkers and permit
+types for all zones in the circle added up (only months with data for every
+zone), every zone in the circle with its own capacity history,
 the same figures for other radii, and the history of the zone the address lies in.
 The zone list downloads as CSV or GeoJSON, and the page address carries the
 selection, so it can be shared.

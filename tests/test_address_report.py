@@ -185,3 +185,12 @@ def test_search_reports_missing_configuration_and_unknown_address(data, monkeypa
     with pytest.raises(HTTPException) as unknown:
         api.address_search(q="Neexistující 999")
     assert unknown.value.status_code == 404
+
+
+def test_circle_history_adds_up_zones_in_months_where_all_have_data(data, zone_index) -> None:
+    series = report(data, zone_index)["radius_series"]
+
+    # P1-B has no row for May and July, so only June and August count.
+    assert [row["date"] for row in series] == ["2026-06-30", "2026-08-31"]
+    assert [(row["permits"], row["spaces"]) for row in series] == [(60, 30), (60, 28)]
+    assert series[0]["occupancy"] == 0.9

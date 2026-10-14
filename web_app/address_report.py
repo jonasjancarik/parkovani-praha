@@ -17,6 +17,7 @@ from address_logic import (
     clamp_radius,
     format_geocode_result_label,
     safe_total,
+    weighted_average,
 )
 from constants import POP_MEASURES
 from data import (
@@ -179,6 +180,36 @@ def _reference_series(data: pd.DataFrame, code: str, cast_dne: Optional[str]) ->
     return series
 
 
+def _radius_series(data: pd.DataFrame, codes: list[str], cast_dne: Optional[str]) -> list[dict]:
+    """Every zone in the circle added up, for the months in which all of them have data.
+
+    A month where one zone is missing is left out, so the totals never jump
+    because a zone joined or dropped out.
+    """
+    rows = zone_rows_for_cast_dne(data, codes, cast_dne)
+    if rows.empty:
+        return []
+    zones_per_month = rows.groupby("date")["kod_useku"].nunique()
+    complete = zones_per_month[zones_per_month == len(set(codes))].index
+    rows = rows[rows["date"].isin(complete)]
+    sums = [column for column in ["POP_CELKEM", SPACES, *PARKER_GROUPS, *PERMIT_TYPES] if column in rows.columns]
+    series = []
+    for date, month in rows.groupby("date"):
+        totals = month[sums].apply(pd.to_numeric, errors="coerce").sum(min_count=1)
+        series.append(
+            {
+                "date": _iso(date),
+                "permits": _number(totals.get("POP_CELKEM")),
+                "spaces": _number(totals.get(SPACES)),
+                "occupancy": _number(weighted_average(month, "obsazenost", SPACES), 3),
+                "respect": _number(weighted_average(month, "respektovanost", SPACES), 3),
+                "parkers": {key: _number(totals.get(key), 1) for key in PARKER_GROUPS},
+                "permit_types": {key: _number(totals.get(key)) for key in PERMIT_TYPES},
+            }
+        )
+    return series
+
+
 def build_address_report(
     data: pd.DataFrame,
     zone_index,
@@ -298,6 +329,7 @@ def build_address_report(
             "respect": LOW_RESPECT_THRESHOLD,
         },
         "series": series,
+        "radius_series": _radius_series(nearby_full, codes, cast_dne) if codes else [],
         "zones": _zone_rows(hits, snapshot, history, reference.code),
         "geometry": {"type": "FeatureCollection", "features": features},
         "comparison": comparison,

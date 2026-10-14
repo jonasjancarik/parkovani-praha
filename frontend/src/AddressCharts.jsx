@@ -103,14 +103,20 @@ function breakdownLines(rows, labels) {
     }));
 }
 
-export function ReferenceCharts({ series, reduceMotion }) {
+const WHERE = {
+  zone: { in: "v úseku", permits: "pro adresy u tohoto úseku" },
+  circle: { in: "ve všech úsecích v okruhu", permits: "pro adresy u úseků v okruhu" },
+};
+
+export function ReferenceCharts({ series, reduceMotion, scope = "zone" }) {
+  const where = WHERE[scope];
   const charts = useMemo(() => {
     const rows = series.map((row) => ({ ...row, ...row.parkers, ...row.permit_types }));
     const settings = { reduceMotion };
     return [
       {
         title: "Oprávnění a místa",
-        note: "Počet vydaných oprávnění a parkovacích míst v úseku",
+        note: `Počet vydaných oprávnění a parkovacích míst ${where.in}`,
         option: timeOption(rows, [
           { key: "permits", name: "Parkovací oprávnění", color: RED },
           { key: "spaces", name: "Parkovací místa", color: TEAL },
@@ -118,24 +124,26 @@ export function ReferenceCharts({ series, reduceMotion }) {
       },
       {
         title: "Obsazenost a respektovanost",
-        note: "Podíl obsazených míst a podíl aut, která parkují oprávněně",
+        note: scope === "circle"
+          ? "Podíl obsazených míst a podíl aut, která parkují oprávněně, vážený počtem míst v úsecích"
+          : "Podíl obsazených míst a podíl aut, která parkují oprávněně",
         option: timeOption(rows, [
           { key: "occupancy", name: "Obsazenost", color: MUTED[1] },
           { key: "respect", name: "Respektovanost", color: MUTED[4] },
         ], { ...settings, format: formatPercent }),
       },
       {
-        title: "Kdo v úseku parkuje",
-        note: "Odhad počtu obsazených míst podle skupiny",
+        title: "Kdo tu parkuje",
+        note: `Odhad počtu obsazených míst podle skupiny ${where.in}`,
         option: timeOption(rows, breakdownLines(rows, PARKER_LABELS), { ...settings, stacked: true }),
       },
       {
         title: "Oprávnění podle typu",
-        note: "Složení vydaných oprávnění pro adresy u tohoto úseku",
+        note: `Složení vydaných oprávnění ${where.permits}`,
         option: timeOption(rows, breakdownLines(rows, PERMIT_LABELS), { ...settings, stacked: true }),
       },
     ];
-  }, [series, reduceMotion]);
+  }, [series, reduceMotion, where, scope]);
 
   return (
     <div className="reference-charts">
