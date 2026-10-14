@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { EChart } from "./EChart.jsx";
 import { formatMonth, materializeMonthlyRows, niceAxisMax, spreadLabels } from "./chartData.js";
+import { SOCIAL_NOTE, SOCIAL_OPTIONS, mergeSeries } from "./parkerGroups.js";
 
 // Red and slate stay reserved for permits and for permits per space, so breakdowns use other hues.
 const COLORS = ["#114f50", "#9a684f", "#8a866c", "#b48b87", "#5d8a8b", "#c2a878"];
@@ -153,7 +154,7 @@ function ChartToggle({ options, value, onChange, label }) {
     <div className="chart-toggle" role="group" aria-label={label}>
       {options.map((option) => (
         <button
-          key={option.value}
+          key={String(option.value)}
           type="button"
           className={value === option.value ? "active" : ""}
           aria-pressed={value === option.value}
@@ -534,14 +535,37 @@ function PressureAndForecast({ analytics, reduceMotion }) {
   );
 }
 
-export function AnalyticsSections({ analytics }) {
+function withSocialAsResidents(analytics) {
+  return {
+    ...analytics,
+    permits_by_type: mergeSeries(analytics.permits_by_type, "Sociální", "Rezidentní", ["date"]),
+    parkers_by_type: mergeSeries(analytics.parkers_by_type, "Sociální", "Rezidenti", ["date"]),
+    parker_share_by_district: mergeSeries(analytics.parker_share_by_district, "Sociální", "Rezidenti", ["district"]),
+  };
+}
+
+export function AnalyticsSections({ analytics: sourceAnalytics }) {
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const [socialAsResidents, setSocialAsResidents] = useState(true);
+  const analytics = useMemo(
+    () => (sourceAnalytics && socialAsResidents ? withSocialAsResidents(sourceAnalytics) : sourceAnalytics),
+    [sourceAnalytics, socialAsResidents],
+  );
   if (!analytics) return null;
   return (
     <div className="analytics-sections">
       <div className="analytics-intro">
         <span>Podrobnější analýzy</span>
-        <p>Období, městská část a typ zóny platí všude; část dne ovlivňuje jen složení parkujících.</p>
+        <div className="analytics-intro-notes">
+          <p>Období, městská část a typ zóny platí všude; část dne ovlivňuje jen složení parkujících.</p>
+          <p>{SOCIAL_NOTE}</p>
+        </div>
+        <ChartToggle
+          label="Sociální oprávnění"
+          value={socialAsResidents}
+          onChange={setSocialAsResidents}
+          options={SOCIAL_OPTIONS}
+        />
       </div>
       <TrendBreakdown analytics={analytics} reduceMotion={reduceMotion} />
       <CompositionSection analytics={analytics} reduceMotion={reduceMotion} />

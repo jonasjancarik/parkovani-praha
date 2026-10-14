@@ -9,7 +9,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 
-import { CapacityChart, ReferenceCharts } from "./AddressCharts.jsx";
+import { CapacityChart, ReferenceCharts, SocialToggle } from "./AddressCharts.jsx";
 import {
   addressStateFromSearch,
   addressStateToSearch,
@@ -324,6 +324,7 @@ function RadiusComparison({ report, onRadius }) {
 
 function ReportSections({ report, label, onRadius }) {
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const [socialAsResidents, setSocialAsResidents] = useState(true);
   const { reference, selection, series, summary } = report;
 
   if (summary.zones === 0) {
@@ -361,8 +362,14 @@ function ReportSections({ report, label, onRadius }) {
               dohromady. Počítáme jen měsíce, kdy máme data ze všech, aby změny nevznikaly
               tím, že nějaký úsek přibyl nebo chybí.
             </p>
+            <SocialToggle value={socialAsResidents} onChange={setSocialAsResidents} />
           </div>
-          <ReferenceCharts series={report.radius_series} reduceMotion={reduceMotion} scope="circle" />
+          <ReferenceCharts
+            series={report.radius_series}
+            reduceMotion={reduceMotion}
+            scope="circle"
+            socialAsResidents={socialAsResidents}
+          />
         </section>
       ) : null}
       <ZoneTable report={report} label={label} />
@@ -374,8 +381,9 @@ function ReportSections({ report, label, onRadius }) {
               {reference.inside ? `Úsek ${reference.code}, ve kterém místo leží` : `Nejbližší úsek ${reference.code}`}
             </h2>
             <p>Vývoj jednoho úseku od prvního měření.</p>
+            <SocialToggle value={socialAsResidents} onChange={setSocialAsResidents} />
           </div>
-          <ReferenceCharts series={reference.series} reduceMotion={reduceMotion} />
+          <ReferenceCharts series={reference.series} reduceMotion={reduceMotion} socialAsResidents={socialAsResidents} />
         </section>
       ) : null}
     </>

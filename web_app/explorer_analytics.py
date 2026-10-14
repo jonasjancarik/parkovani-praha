@@ -14,7 +14,8 @@ except ImportError:  # Streamlit runs modules from web_app as top-level imports.
 PERMIT_TYPES = {
     "Rezidentní": "pop_rezidentska",
     "Vlastnická": "pop_vlastnicka",
-    "Abonentní": "pop_abonentska",
+    # TSK calls these permits "abonentní"; they are issued to businesses.
+    "Podnikatelská": "pop_abonentska",
     "Přenosná": "pop_prenosna",
     "Carsharing": "pop_carsharing",
     "Ekologická": "pop_ekologicka",
@@ -25,7 +26,7 @@ PERMIT_TYPES = {
 PARKER_TYPES = {
     "Rezidenti": "rezidentska",
     "Vlastníci": "vlastnicka",
-    "Abonenti": "abonentska",
+    "Podnikatelé": "abonentska",
     "Návštěvníci": "navstevnici",
     "Ostatní": "ostatni",
     "Sociální": "socialni",

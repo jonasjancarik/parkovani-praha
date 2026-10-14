@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { EChart } from "./EChart.jsx";
 import { formatMonth, materializeMonthlyRows } from "./chartData.js";
 import { formatNumber, formatPercent } from "./format.js";
+import { SOCIAL_NOTE, SOCIAL_OPTIONS, mergeColumns } from "./parkerGroups.js";
 
 const RED = "#e33b32";
 const TEAL = "#114f50";
@@ -11,15 +12,16 @@ const MUTED = ["#114f50", "#9a684f", "#8a866c", "#b48b87", "#5d8a8b", "#c2a878",
 const EMPTY_SPACE = "#cfc8bb";
 const PARKER_LABELS = {
   rezidentska: "Rezidenti",
+  socialni: "Sociální",
   vlastnicka: "Vlastníci",
-  abonentska: "Abonenti",
+  abonentska: "Podnikatelé",
   navstevnici: "Návštěvníci",
   volna_mista: "Volná místa",
 };
 const PERMIT_LABELS = {
   pop_rezidentska: "Rezidentní",
   pop_vlastnicka: "Vlastnická",
-  pop_abonentska: "Abonentní",
+  pop_abonentska: "Podnikatelská",
   pop_prenosna: "Přenosná",
   pop_carsharing: "Carsharing",
   pop_ekologicka: "Ekologická",
@@ -85,6 +87,27 @@ function timeOption(rows, lines, { format = formatNumber, fromZero = true, stack
   };
 }
 
+export function SocialToggle({ value, onChange }) {
+  return (
+    <div className="social-toggle">
+      <div className="chart-toggle" role="group" aria-label="Sociální oprávnění">
+        {SOCIAL_OPTIONS.map((option) => (
+          <button
+            key={String(option.value)}
+            type="button"
+            className={value === option.value ? "active" : ""}
+            aria-pressed={value === option.value}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <p>{SOCIAL_NOTE}</p>
+    </div>
+  );
+}
+
 export function CapacityChart({ series, reduceMotion }) {
   const option = useMemo(
     () => timeOption(series, [{ key: "spaces", name: "Parkovací místa", color: TEAL }], { fromZero: false, reduceMotion }),
@@ -108,10 +131,16 @@ const WHERE = {
   circle: { in: "ve všech úsecích v okruhu", permits: "pro adresy u úseků v okruhu" },
 };
 
-export function ReferenceCharts({ series, reduceMotion, scope = "zone" }) {
+export function ReferenceCharts({ series, reduceMotion, scope = "zone", socialAsResidents = true }) {
   const where = WHERE[scope];
   const charts = useMemo(() => {
-    const rows = series.map((row) => ({ ...row, ...row.parkers, ...row.permit_types }));
+    const rows = series.map((row) => {
+      const parkers = socialAsResidents ? mergeColumns(row.parkers, "socialni", "rezidentska") : row.parkers;
+      const permits = socialAsResidents
+        ? mergeColumns(row.permit_types, "pop_socialni", "pop_rezidentska")
+        : row.permit_types;
+      return { ...row, ...parkers, ...permits };
+    });
     const settings = { reduceMotion };
     return [
       {
@@ -143,7 +172,7 @@ export function ReferenceCharts({ series, reduceMotion, scope = "zone" }) {
         option: timeOption(rows, breakdownLines(rows, PERMIT_LABELS), { ...settings, stacked: true }),
       },
     ];
-  }, [series, reduceMotion, where, scope]);
+  }, [series, reduceMotion, where, scope, socialAsResidents]);
 
   return (
     <div className="reference-charts">

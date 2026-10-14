@@ -30,7 +30,7 @@ PARKER_PERIODS = ("den", "noc")
 PARKER_GROUPS = {
     "Rezidenti": ("rezidentska", "socialni"),
     "Návštěvníci": ("navstevnici",),
-    "Abonenti": ("abonentska",),
+    "Podnikatelé": ("abonentska",),
     "Vlastníci": ("vlastnicka",),
     "Ostatní": ("ostatni",),
 }

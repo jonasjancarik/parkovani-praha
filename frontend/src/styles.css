@@ -365,6 +365,10 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   color: var(--muted);
   font-size: 12px;
 }
+.analytics-intro-notes { flex: 1 1 auto; }
+.analytics-intro-notes p + p { margin-top: 4px; }
+.social-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 12px; }
+.social-toggle p { margin: 0 !important; }
 .analysis-section {
   padding: 40px 0 44px;
   border-bottom: 1px solid var(--rule);

@@ -54,7 +54,7 @@ RADIUS_COLUMNS = [
     "obsazenost",
     "respektovanost",
 ]
-PARKER_GROUPS = ["rezidentska", "vlastnicka", "abonentska", "navstevnici", "volna_mista"]
+PARKER_GROUPS = ["rezidentska", "socialni", "vlastnicka", "abonentska", "navstevnici", "volna_mista"]
 PERMIT_TYPES = list(POP_MEASURES.values())
 
 
