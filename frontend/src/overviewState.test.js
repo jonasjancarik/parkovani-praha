@@ -24,6 +24,10 @@ test("explorer links preselect a district or a metric", () => {
   assert.equal(explorerHref(), "./?page=explorer");
   assert.equal(explorerHref({ district: "P07" }), "./?page=explorer&district=P07");
   assert.equal(explorerHref({ metric: "pressure" }), "./?page=explorer&metric=pressure");
+  assert.equal(
+    explorerHref({ metric: "pressure", start: "2019-03-01", sameZones: true }),
+    "./?page=explorer&start=2019-03-01&same_zones=true&metric=pressure",
+  );
 });
 
 test("district names are declined after a preposition", () => {

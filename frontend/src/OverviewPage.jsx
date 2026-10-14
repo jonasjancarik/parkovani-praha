@@ -121,10 +121,11 @@ function TrendSection({ overview }) {
   const compact = useMediaQuery("(max-width: 760px)");
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const option = useMemo(
-    () => ratioChartOption(overview.series, compact, reduceMotion),
-    [overview.series, compact, reduceMotion],
+    () => ratioChartOption(overview.trend.series, compact, reduceMotion),
+    [overview.trend.series, compact, reduceMotion],
   );
-  const { city, series } = overview;
+  const { city, trend: { series, zones, spaces, share_of_spaces: share } } = overview;
+  const since = formatMonthGenitive(series[0].date);
   const trend = ratioTrend(city.ratio_change);
   return (
     <section className="overview-section" aria-labelledby="trend-heading">
@@ -137,17 +138,23 @@ function TrendSection({ overview }) {
           </p>
         ) : null}
         <p>
-          Graf ukazuje celou Prahu od {formatMonthGenitive(series[0].date)}. Čára se přerušuje
-          v měsících, pro které data chybí.
+          Graf sleduje jen úseky, které mají data v každém měsíci od {since}, aby vývoj
+          nezkreslovalo rozšiřování zón. Je jich {formatNumber(zones)} a mají {formatNumber(spaces)} míst
+          {share != null ? `, tedy ${formatPercent(share)} dnešní kapacity` : ""}. Proto graf končí
+          na {formatRatio(series.at(-1).permits_per_space)}, zatímco za celou Prahu je to {formatRatio(city.permits_per_space)}.
         </p>
-        <a className="overview-link" href={explorerHref({ metric: "pressure" })}>
+        <p>Čára se přerušuje v měsících, pro které data chybí.</p>
+        <a
+          className="overview-link"
+          href={explorerHref({ metric: "pressure", start: `${series[0].date.slice(0, 7)}-01`, sameZones: true })}
+        >
           Prozkoumat vývoj podrobně <IconArrowRight size={15} stroke={1.7} aria-hidden="true" />
         </a>
       </div>
       <EChart
         option={option}
         className="overview-chart"
-        ariaLabel={`Vývoj počtu parkovacích oprávnění na jedno místo v Praze od ${formatMonthGenitive(series[0].date)}`}
+        ariaLabel={`Vývoj počtu parkovacích oprávnění na jedno místo od ${since} v úsecích, které existují celou dobu`}
       />
     </section>
   );
@@ -406,7 +413,7 @@ export function OverviewPage() {
         {ready ? (
           <>
             <Figures city={overview.city} />
-            <TrendSection overview={overview} />
+            {overview.trend ? <TrendSection overview={overview} /> : null}
             {overview.districts.length > 0 ? <DistrictSection overview={overview} /> : null}
             {overview.parkers.length > 0 ? <ParkerSection parkers={overview.parkers} /> : null}
             <AddressSection />

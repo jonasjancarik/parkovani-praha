@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 
 try:
@@ -131,6 +133,31 @@ def _parkers(scoped: pd.DataFrame) -> list[dict]:
     return periods
 
 
+def _trend(df: pd.DataFrame, start: str | None, current_spaces: int | None) -> dict | None:
+    """Permits per space for the zones that exist in every month since permits are known.
+
+    Zones keep being added, and new zones on the outskirts have fewer permits per
+    space, so a citywide line would understate how the ratio develops.
+    """
+    if start is None:
+        return None
+    filters = ExplorerFilters(start=date.fromisoformat(start), same_zones=True)
+    series = [
+        row for row in build_explorer_payload(df, filters)["series"]
+        if row["permits_per_space"] is not None
+    ]
+    if not series:
+        return None
+    zones = _filter_rows(df, filters, apply_cast_dne=False)["kod_useku"].nunique()
+    spaces = series[-1]["spaces"]
+    return {
+        "series": series,
+        "zones": int(zones),
+        "spaces": spaces,
+        "share_of_spaces": spaces / current_spaces if current_spaces else None,
+    }
+
+
 def build_city_overview(df: pd.DataFrame, downloaded_on: str | None = None) -> dict:
     """Citywide figures for the overview page, using the explorer's default selection."""
     filters = ExplorerFilters()
@@ -141,7 +168,11 @@ def build_city_overview(df: pd.DataFrame, downloaded_on: str | None = None) -> d
         "latest_date": series[-1]["date"] if series else None,
         "downloaded_on": downloaded_on,
         "city": _city(series),
-        "series": series,
+        "trend": _trend(
+            df,
+            series[0]["date"] if series else None,
+            series[-1]["spaces"] if series else None,
+        ),
         "districts": _districts(_unique_zone_months(scoped)),
         "min_ranked_spaces": MIN_RANKED_SPACES,
         "parkers": _parkers(scoped),

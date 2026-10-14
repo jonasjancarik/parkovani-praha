@@ -6,9 +6,11 @@ export function pageFromSearch(search) {
   return params.get("page") ?? ([...params.keys()].length > 0 ? "explorer" : "overview");
 }
 
-export function explorerHref({ district, metric } = {}) {
+export function explorerHref({ district, metric, start, sameZones } = {}) {
   const params = new URLSearchParams({ page: "explorer" });
+  if (start) params.set("start", start);
   if (district) params.set("district", district);
+  if (sameZones) params.set("same_zones", "true");
   if (metric) params.set("metric", metric);
   return `./?${params}`;
 }

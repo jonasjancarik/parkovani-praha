@@ -81,3 +81,16 @@ def test_parker_shares_are_reported_for_day_and_night() -> None:
 def test_overview_carries_the_download_date() -> None:
     assert build_city_overview(overview_sample(), "2026-10-13")["downloaded_on"] == "2026-10-13"
     assert build_city_overview(overview_sample())["downloaded_on"] is None
+
+
+def test_trend_follows_only_zones_present_since_permits_are_known() -> None:
+    frame = overview_sample()
+    # A zone added in the last month must not enter the trend line.
+    added = frame[
+        (frame["date"] == frame["date"].max()) & (frame["kod_useku"] == "A")
+    ].assign(kod_useku="D")
+    trend = build_city_overview(pd.concat([frame, added]))["trend"]
+
+    assert [row["spaces"] for row in trend["series"]] == [3050, 3050, 3050]
+    assert trend["zones"] == 3
+    assert trend["share_of_spaces"] == pytest.approx(3050 / 4050)
