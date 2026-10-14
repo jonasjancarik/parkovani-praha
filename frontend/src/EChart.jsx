@@ -21,7 +21,7 @@ echarts.use([
   TreemapChart,
 ]);
 
-export function EChart({ option, className = "", ariaLabel }) {
+export function EChart({ option, className = "", ariaLabel, style }) {
   const elementRef = useRef(null);
 
   useEffect(() => {
@@ -40,6 +40,7 @@ export function EChart({ option, className = "", ariaLabel }) {
     <div
       ref={elementRef}
       className={className}
+      style={style}
       role="img"
       aria-label={ariaLabel}
     />

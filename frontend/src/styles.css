@@ -430,19 +430,15 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   padding-left: 30px;
   padding-right: 0;
 }
-.zone-mix-chart { width: 100%; height: 86px; }
-.zone-legend { margin: 2px 0 0; }
-.zone-legend > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 7px 0;
-  border-top: 1px solid #e1dcd3;
-  font-size: 12px;
-}
-.zone-legend dt { color: #34332e; }
-.zone-legend dd { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
-.parker-share-chart { width: 100%; height: 315px; }
+.share-bar { display: flex; gap: 2px; height: 16px; margin-top: 22px; }
+.share-bar span { flex-basis: 0; min-width: 2px; }
+.share-legend { margin-top: 16px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.share-legend th, .share-legend td { padding: 8px 0 8px 12px; border-top: 1px solid #e1dcd3; }
+.share-legend th { padding-left: 0; text-align: left; font-weight: 400; color: #34332e; }
+.share-legend td { color: var(--muted); }
+.share-legend .share-legend-value { color: var(--ink); font-weight: 600; }
+.share-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 9px; }
+.parker-share-chart { width: 100%; margin-top: 8px; }
 .change-chart { height: 340px; }
 .pressure-forecast-section { padding-block: 0; }
 .pressure-forecast-grid {
@@ -650,7 +646,6 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .chart-toggle button { flex: 1 0 auto; padding-inline: 8px; }
   .analysis-chart, .analysis-chart-wide, .change-chart { height: 300px; }
   .composition-panel, .pressure-forecast-grid > div { padding-right: 0; }
-  .parker-share-chart { height: 350px; }
   .forecast-select { margin-top: 14px; width: 180px; }
   .analytics-sections { margin-top: 28px; }
   .address-toolbar { grid-template-columns: 1fr; margin-top: 24px; }

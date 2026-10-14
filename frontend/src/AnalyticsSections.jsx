@@ -196,6 +196,7 @@ function TrendBreakdown({ analytics, reduceMotion }) {
     },
     parkers: {
       rows: analytics.parkers_by_type,
+      seriesColors: PARKER_COLORS,
       title: "Kdo v zónách parkuje",
       subtitle: "Vývoj odhadovaného počtu parkujících podle skupiny",
     },
@@ -229,52 +230,61 @@ function TrendBreakdown({ analytics, reduceMotion }) {
   );
 }
 
-function zoneMixOption(rows) {
-  return {
-    animationDuration: 450,
-    grid: { left: 2, right: 2, top: 22, bottom: 18 },
-    xAxis: { type: "value", max: 1, show: false },
-    yAxis: { type: "category", data: ["Kapacita"], show: false },
-    tooltip: {
-      trigger: "item",
-      formatter: ({ seriesName, value }) => `${ZONE_LABELS[seriesName] ?? seriesName}: ${percentFormat.format(value)}`,
-    },
-    series: rows.map((row, index) => ({
-      name: row.zone_type,
-      type: "bar",
-      stack: "share",
-      barWidth: 22,
-      data: [row.share],
-      itemStyle: { color: ZONE_COLORS[row.zone_type] ?? COLORS[index % COLORS.length] },
-      label: {
-        show: row.share >= 0.1,
-        position: "inside",
-        formatter: percentFormat.format(row.share),
-        color: "#fffdf8",
-        fontFamily: "Inter, sans-serif",
-        fontSize: 11,
-      },
-    })),
-  };
+// Each group keeps its colour in every chart; red and slate stay reserved.
+const PARKER_ORDER = ["Rezidenti", "Sociální", "Návštěvníci", "Podnikatelé", "Vlastníci", "Ostatní"];
+const PARKER_COLORS = {
+  Rezidenti: "#114f50",
+  Sociální: "#5d8a8b",
+  Návštěvníci: "#9a684f",
+  Podnikatelé: "#8a866c",
+  Vlastníci: "#c2a878",
+  Ostatní: "#b48b87",
+};
+const PARKER_ROW_HEIGHT = 34;
+
+function spacesText(count) {
+  const noun = count === 1 ? "místo" : count >= 2 && count <= 4 ? "místa" : "míst";
+  return `${numberFormat.format(count)} ${noun}`;
+}
+
+function parkerOrder(names) {
+  return [...names].sort((a, b) => (PARKER_ORDER.indexOf(a) + 1 || 99) - (PARKER_ORDER.indexOf(b) + 1 || 99));
 }
 
 function parkerShareOption(rows) {
-  const districts = [...new Set(rows.map((row) => row.district))];
-  const names = [...new Set(rows.map((row) => row.series))];
   const shareByKey = new Map(rows.map((row) => [`${row.district}|${row.series}`, row.share]));
+  // Districts with the most residents first, so that the bars read as a ranking.
+  const districts = [...new Set(rows.map((row) => row.district))]
+    .sort((a, b) => (shareByKey.get(`${b}|Rezidenti`) ?? 0) - (shareByKey.get(`${a}|Rezidenti`) ?? 0));
+  const names = parkerOrder(new Set(rows.map((row) => row.series)));
   return {
     animationDuration: 450,
-    color: COLORS,
-    grid: { left: 70, right: 12, top: 42, bottom: 16 },
-    legend: { top: 0, left: 0, itemWidth: 13, itemHeight: 3, textStyle: legendText },
+    grid: { left: 70, right: 12, top: 40, bottom: 26 },
+    legend: { top: 0, left: 0, itemWidth: 13, itemHeight: 8, textStyle: legendText, data: names },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: (value) => percentFormat.format(value) },
     xAxis: { type: "value", max: 1, axisLabel: { ...axisText, formatter: (value) => percentFormat.format(value) }, splitLine },
-    yAxis: { type: "category", data: districts.map(districtLabel), axisTick: { show: false }, axisLine: { show: false }, axisLabel: axisText },
+    yAxis: {
+      type: "category",
+      inverse: true,
+      data: districts.map(districtLabel),
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: axisText,
+    },
     series: names.map((name) => ({
       name,
       type: "bar",
       stack: "share",
-      barWidth: 9,
+      barWidth: 18,
+      itemStyle: { color: PARKER_COLORS[name] ?? QUIET_LINE },
+      label: {
+        show: true,
+        position: "inside",
+        formatter: ({ value }) => (value >= 0.08 ? percentFormat.format(value) : ""),
+        color: ["Vlastníci", "Ostatní"].includes(name) ? "#24231f" : "#fffdf8",
+        fontFamily: "Inter, sans-serif",
+        fontSize: 11,
+      },
       data: districts.map((district) => shareByKey.get(`${district}|${name}`) ?? 0),
       emphasis: { focus: "series" },
     })),
@@ -282,32 +292,51 @@ function parkerShareOption(rows) {
 }
 
 function CompositionSection({ analytics, reduceMotion }) {
-  const zoneOption = useMemo(
-    () => motionOption(zoneMixOption(analytics.zone_mix), reduceMotion),
-    [analytics.zone_mix, reduceMotion],
-  );
   const parkerOption = useMemo(
     () => motionOption(parkerShareOption(analytics.parker_share_by_district), reduceMotion),
     [analytics.parker_share_by_district, reduceMotion],
   );
+  const districtCount = new Set(analytics.parker_share_by_district.map((row) => row.district)).size;
   return (
     <section className="analysis-section composition-section">
       <div className="composition-grid">
         <div className="composition-panel zone-composition">
           <AnalysisHeader title="Složení parkovací kapacity" subtitle="Podíl míst podle typu regulované zóny" />
-          <EChart option={zoneOption} className="zone-mix-chart" ariaLabel="Podíl parkovacích míst v rezidentních, smíšených, návštěvnických a ostatních zónách" />
-          <dl className="zone-legend">
-            {analytics.zone_mix.map((row) => (
-              <div key={row.zone_type}>
-                <dt>{ZONE_LABELS[row.zone_type] ?? row.zone_type}</dt>
-                <dd>{numberFormat.format(row.spaces)} · {percentFormat.format(row.share)}</dd>
-              </div>
+          <div className="share-bar" aria-hidden="true">
+            {analytics.zone_mix.map((row, index) => (
+              <span
+                key={row.zone_type}
+                style={{ flexGrow: row.share, background: ZONE_COLORS[row.zone_type] ?? COLORS[index % COLORS.length] }}
+              />
             ))}
-          </dl>
+          </div>
+          <table className="share-legend">
+            <caption className="sr-only">Parkovací místa podle typu zóny</caption>
+            <tbody>
+              {analytics.zone_mix.map((row, index) => (
+                <tr key={row.zone_type}>
+                  <th scope="row">
+                    <i style={{ background: ZONE_COLORS[row.zone_type] ?? COLORS[index % COLORS.length] }} aria-hidden="true" />
+                    {ZONE_LABELS[row.zone_type] ?? row.zone_type}
+                  </th>
+                  <td>{spacesText(row.spaces)}</td>
+                  <td className="share-legend-value">{percentFormat.format(row.share)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
         <div className="composition-panel parker-composition">
-          <AnalysisHeader title="Složení parkujících podle městské části" subtitle="Podíl jednotlivých skupin na celkovém počtu parkujících" />
-          <EChart option={parkerOption} className="parker-share-chart" ariaLabel="Složení skupin parkujících podle městské části" />
+          <AnalysisHeader
+            title="Složení parkujících podle městské části"
+            subtitle="Podíl skupin na zaparkovaných autech, seřazeno podle podílu rezidentů"
+          />
+          <EChart
+            option={parkerOption}
+            className="parker-share-chart"
+            style={{ height: 66 + Math.max(districtCount, 1) * PARKER_ROW_HEIGHT }}
+            ariaLabel="Složení skupin parkujících podle městské části"
+          />
         </div>
       </div>
     </section>
@@ -544,9 +573,8 @@ function withSocialAsResidents(analytics) {
   };
 }
 
-export function AnalyticsSections({ analytics: sourceAnalytics }) {
+export function AnalyticsSections({ analytics: sourceAnalytics, socialAsResidents, onSocialAsResidents }) {
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const [socialAsResidents, setSocialAsResidents] = useState(true);
   const analytics = useMemo(
     () => (sourceAnalytics && socialAsResidents ? withSocialAsResidents(sourceAnalytics) : sourceAnalytics),
     [sourceAnalytics, socialAsResidents],
@@ -563,7 +591,7 @@ export function AnalyticsSections({ analytics: sourceAnalytics }) {
         <ChartToggle
           label="Sociální oprávnění"
           value={socialAsResidents}
-          onChange={setSocialAsResidents}
+          onChange={onSocialAsResidents}
           options={SOCIAL_OPTIONS}
         />
       </div>
