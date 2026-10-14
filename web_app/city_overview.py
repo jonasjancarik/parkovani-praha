@@ -131,7 +131,7 @@ def _parkers(scoped: pd.DataFrame) -> list[dict]:
     return periods
 
 
-def build_city_overview(df: pd.DataFrame) -> dict:
+def build_city_overview(df: pd.DataFrame, downloaded_on: str | None = None) -> dict:
     """Citywide figures for the overview page, using the explorer's default selection."""
     filters = ExplorerFilters()
     explorer = build_explorer_payload(df, filters)
@@ -139,6 +139,7 @@ def build_city_overview(df: pd.DataFrame) -> dict:
     scoped = _filter_rows(df, filters, apply_cast_dne=False)
     return {
         "latest_date": series[-1]["date"] if series else None,
+        "downloaded_on": downloaded_on,
         "city": _city(series),
         "series": series,
         "districts": _districts(_unique_zone_months(scoped)),

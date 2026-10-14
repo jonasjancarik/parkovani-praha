@@ -23,7 +23,7 @@ from address_report import (  # noqa: E402
     search_address,
 )
 from city_overview import build_city_overview  # noqa: E402
-from data import load_parking_data  # noqa: E402
+from data import last_download_date, load_parking_data  # noqa: E402
 from explorer_analytics import build_overview_analytics  # noqa: E402
 from explorer_data import build_explorer_payload, make_filters  # noqa: E402
 from geo import GeocodingError, load_zone_index, load_zsj_mapping  # noqa: E402
@@ -84,7 +84,7 @@ def explorer(
 
 @lru_cache(maxsize=1)
 def city_overview_payload() -> dict:
-    return build_city_overview(parking_data())
+    return build_city_overview(parking_data(), last_download_date())
 
 
 @app.get("/api/overview")

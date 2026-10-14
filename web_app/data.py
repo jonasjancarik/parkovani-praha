@@ -1,9 +1,10 @@
+import json
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 
-from config import PARKING_PATH
+from config import LAST_DOWNLOAD_PATH, PARKING_PATH
 
 
 def load_parking_data() -> pd.DataFrame:
@@ -12,6 +13,14 @@ def load_parking_data() -> pd.DataFrame:
     df["year"] = df["date"].dt.year
     df["month"] = df["date"].dt.month
     return df
+
+
+def last_download_date() -> Optional[str]:
+    """Day of the last export from the TSK portal, or None when it is not recorded."""
+    try:
+        return json.loads(LAST_DOWNLOAD_PATH.read_text(encoding="utf-8"))["date"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def apply_filters(

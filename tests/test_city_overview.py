@@ -76,3 +76,8 @@ def test_parker_shares_are_reported_for_day_and_night() -> None:
     night = {group["series"]: group["share"] for group in parkers["noc"]["groups"]}
     assert day == {"Rezidenti": pytest.approx(0.6), "Návštěvníci": pytest.approx(0.4)}
     assert night["Rezidenti"] == pytest.approx(0.9)
+
+
+def test_overview_carries_the_download_date() -> None:
+    assert build_city_overview(overview_sample(), "2026-10-13")["downloaded_on"] == "2026-10-13"
+    assert build_city_overview(overview_sample())["downloaded_on"] is None

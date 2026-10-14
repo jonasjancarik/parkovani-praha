@@ -1,3 +1,4 @@
+import json
 import requests
 import os
 from dotenv import load_dotenv
@@ -390,3 +391,8 @@ if not args.type_of_data or args.type_of_data == "BUILDINGS":
                 f.write(r.text)
 
             print(f"Progress: {counter}/{len(filenames)}", end="\r")
+
+# The web app tells readers when the data were last exported from the portal.
+with open("data/downloaded/last_download.json", "w", encoding="utf-8") as f:
+    json.dump({"date": datetime.date.today().isoformat()}, f)
+    f.write("\n")

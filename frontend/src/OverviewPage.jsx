@@ -11,6 +11,7 @@ import {
   formatNumber,
   formatPercent,
   formatRatio,
+  isoToCzech,
   ratioFormat,
 } from "./format.js";
 import { useJson, useMediaQuery } from "./hooks.js";
@@ -338,7 +339,7 @@ function AddressSection() {
   );
 }
 
-function DataSection({ latestDate }) {
+function DataSection({ latestDate, downloadedOn }) {
   return (
     <section className="overview-section" aria-labelledby="data-heading">
       <div className="overview-text">
@@ -346,9 +347,11 @@ function DataSection({ latestDate }) {
       </div>
       <div className="overview-prose">
         <p>
-          Údaje zveřejňuje Technická správa komunikací na{" "}
-          <a href="https://zps.tsk-praha.cz/">portálu zón placeného stání</a> po měsících.
-          Nejnovější jsou za {formatMonth(latestDate)}.
+          Data poskytuje Technická správa komunikací přes svůj{" "}
+          <a href="https://zps.tsk-praha.cz/">portál zón placeného stání</a>.{" "}
+          {downloadedOn
+            ? `Náš poslední export z portálu je z ${isoToCzech(downloadedOn)}, nejnovější měsíc v datech je ${formatMonth(latestDate)}.`
+            : `Nejnovější měsíc v datech je ${formatMonth(latestDate)}.`}
         </p>
         <p>
           Oprávnění na jedno místo říká, kolik platných parkovacích oprávnění připadá na jedno
@@ -407,7 +410,7 @@ export function OverviewPage() {
             {overview.districts.length > 0 ? <DistrictSection overview={overview} /> : null}
             {overview.parkers.length > 0 ? <ParkerSection parkers={overview.parkers} /> : null}
             <AddressSection />
-            <DataSection latestDate={overview.latest_date} />
+            <DataSection latestDate={overview.latest_date} downloadedOn={overview.downloaded_on} />
           </>
         ) : null}
       </main>
