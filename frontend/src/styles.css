@@ -572,15 +572,16 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
 .overview-districts tbody th a { color: var(--ink); text-decoration: underline; text-decoration-color: #b9b3a8; text-underline-offset: 3px; }
 .overview-districts tbody th a:hover { color: var(--teal); text-decoration-color: currentColor; }
 .overview-districts tbody tr:hover { background: rgba(255,255,255,.34); }
-.parker-row { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 14px; margin-bottom: 10px; }
-.parker-period { font-size: 13px; }
-.parker-bar { display: flex; gap: 2px; height: 26px; }
-.parker-bar span { flex-basis: 0; }
-.parker-table { max-width: 440px; margin: 20px 0 0 76px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.parker-toggle { width: max-content; margin: -6px 0 14px; }
+.parker-treemap { width: 100%; height: 380px; }
+.parker-table { margin-top: 18px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .parker-table th, .parker-table td { padding: 7px 0 7px 12px; border-top: 1px solid #e1dcd3; }
 .parker-table thead th { border-top: 0; color: var(--muted); font-size: 12px; }
 .parker-table th:first-child { padding-left: 0; text-align: left; }
 .parker-table i { display: inline-block; width: 10px; height: 10px; margin-right: 9px; }
+@media (min-width: 761px) {
+  .parker-table { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+}
 .overview-address form { display: grid; gap: 6px; max-width: 560px; margin-bottom: 12px; }
 .overview-address .address-error { margin-top: 4px; }
 
@@ -655,7 +656,7 @@ td, th { text-align: right; padding: 4px 7px; white-space: nowrap; }
   .explorer-head.overview-head { padding-bottom: 22px; }
   .overview-figures { grid-template-columns: 1fr; gap: 20px; }
   .overview-chart { height: 280px; }
-  .parker-table { margin-left: 0; }
+  .parker-treemap { height: 320px; }
   .overview-address .address-input { flex-wrap: wrap; }
   .overview-address .address-input input { flex-basis: 100%; }
 }

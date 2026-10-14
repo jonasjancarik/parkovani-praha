@@ -23,6 +23,7 @@ import {
   formatPercentChange,
   formatRatioChange,
   longRunTrend,
+  mergeSmallGroups,
   ratioChangeClause,
   shareOf,
   yearChangeClause,
@@ -225,14 +226,102 @@ function DistrictSection({ overview }) {
   );
 }
 
+// Labels on the lighter tiles are dark so that they stay readable.
+const LIGHT_TILES = new Set(["#b48b87", "#c2a878"]);
+// Below this share a tile is too low for two lines, so its label goes on one.
+const ONE_LINE_SHARE = 0.08;
+
+function parkerTreemapOption(period, other, colorOf, reduceMotion, compact) {
+  const oneLineShare = compact ? 0.15 : ONE_LINE_SHARE;
+  const nameMinShare = compact ? 1 : 0.035;
+  const otherLabel = other ? PERIOD_LABELS[other.period]?.toLowerCase() : null;
+  return {
+    animationDurationUpdate: reduceMotion ? 0 : 700,
+    tooltip: {
+      backgroundColor: "#fffdf8",
+      borderColor: "#d9d4ca",
+      textStyle: { color: "#26251f", fontFamily: "Inter, sans-serif", fontSize: 13 },
+      formatter: ({ data }) => {
+        const lines = [
+          `<strong>${data.name}</strong>`,
+          `${formatPercent(data.share)} zaparkovaných aut, přibližně ${formatNumber(data.cars)} aut`,
+        ];
+        if (data.parts.length > 1) lines.push(`Patří sem: ${data.parts.join(", ")}`);
+        const otherShare = other?.groups.find((group) => group.series === data.name)?.share;
+        if (otherShare != null) lines.push(`<span style="color:#74716a">${otherLabel}: ${formatPercent(otherShare)}</span>`);
+        return lines.join("<br>");
+      },
+    },
+    series: [{
+      type: "treemap",
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      roam: false,
+      nodeClick: false,
+      breadcrumb: { show: false },
+      sort: "desc",
+      itemStyle: { borderColor: "#f7f4ed", borderWidth: 3, gapWidth: 3 },
+      emphasis: { itemStyle: { borderColor: "#24231f" } },
+      label: {
+        show: true,
+        position: "insideTopLeft",
+        padding: [10, 12],
+        formatter: ({ data }) => `{share|${formatPercent(data.share)}}\n{name|${data.name}}`,
+        rich: {
+          share: { fontFamily: "Newsreader, Georgia, serif", fontSize: compact ? 24 : 30, lineHeight: compact ? 28 : 34 },
+          name: { fontFamily: "Inter, sans-serif", fontSize: 13, lineHeight: 18 },
+          small: { fontFamily: "Inter, sans-serif", fontSize: 12, lineHeight: 16 },
+        },
+      },
+      data: period.groups.map((group) => ({
+        id: group.series,
+        name: group.series,
+        value: group.share,
+        share: group.share,
+        cars: group.value,
+        parts: group.parts,
+        itemStyle: { color: colorOf(group.series) },
+        label: {
+          color: LIGHT_TILES.has(colorOf(group.series)) ? "#24231f" : "#fffdf8",
+          ...(group.share < oneLineShare
+            ? {
+                // The narrowest tiles only fit the share; the name is in the tooltip.
+                formatter: `{small|${formatPercent(group.share)}${group.share < nameMinShare ? "" : ` ${group.series}`}}`,
+                padding: [8, 10],
+              }
+            : {}),
+        },
+      })),
+    }],
+  };
+}
+
 function ParkerSection({ parkers }) {
-  const day = parkers.find((row) => row.period === "den");
-  const night = parkers.find((row) => row.period === "noc");
-  const names = (day ?? night).groups.map((group) => group.series);
-  const colorOf = (name) => PARKER_COLORS[names.indexOf(name) % PARKER_COLORS.length];
+  const periods = useMemo(() => mergeSmallGroups(parkers), [parkers]);
+  const [selected, setSelected] = useState(periods[0].period);
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const compact = useMediaQuery("(max-width: 760px)");
+  const period = periods.find((row) => row.period === selected) ?? periods[0];
+  const other = periods.find((row) => row.period !== period.period);
+  const names = useMemo(() => periods[0].groups.map((group) => group.series), [periods]);
+  const option = useMemo(
+    () => parkerTreemapOption(
+      period,
+      other,
+      (name) => PARKER_COLORS[names.indexOf(name) % PARKER_COLORS.length],
+      reduceMotion,
+      compact,
+    ),
+    [period, other, names, reduceMotion, compact],
+  );
+  const day = periods.find((row) => row.period === "den");
+  const night = periods.find((row) => row.period === "noc");
   const dayResidents = shareOf(day, "Rezidenti");
   const dayVisitors = shareOf(day, "Návštěvníci");
   const nightResidents = shareOf(night, "Rezidenti");
+  const nightVisitors = shareOf(night, "Návštěvníci");
   return (
     <section className="overview-section" aria-labelledby="parkers-heading">
       <div className="overview-text">
@@ -241,38 +330,57 @@ function ParkerSection({ parkers }) {
           <p>
             Ve dne patří rezidentům {formatPercent(dayResidents)} zaparkovaných aut
             a návštěvníkům {formatPercent(dayVisitors)}.
-            {nightResidents != null ? ` V noci je rezidentských aut ${formatPercent(nightResidents)}.` : ""}
+            {nightResidents != null && nightVisitors != null
+              ? ` V noci podíl rezidentů stoupá na ${formatPercent(nightResidents)} a návštěvníků je jen ${formatPercent(nightVisitors)}.`
+              : ""}
           </p>
         ) : null}
-        <p>Podíly vycházejí z měření obsazenosti za {formatMonth((day ?? night).date)}.</p>
+        <p>
+          Podíly vycházejí z měření obsazenosti za {formatMonth(period.date)}. Když na dlaždici
+          najedete myší nebo klepnete, uvidíte přibližný počet aut a srovnání s druhou částí dne.
+        </p>
       </div>
       <div className="parker-mix">
-        {parkers.map((period) => (
-          <div key={period.period} className="parker-row">
-            <span className="parker-period">{PERIOD_LABELS[period.period] ?? period.period}</span>
-            <div className="parker-bar" aria-hidden="true">
-              {names.map((name) => (
-                <span key={name} style={{ flexGrow: shareOf(period, name) ?? 0, background: colorOf(name) }} />
-              ))}
-            </div>
+        {periods.length > 1 ? (
+          <div className="chart-toggle parker-toggle" role="group" aria-label="Část dne">
+            {periods.map((row) => (
+              <button
+                key={row.period}
+                type="button"
+                className={row.period === period.period ? "active" : ""}
+                aria-pressed={row.period === period.period}
+                onClick={() => setSelected(row.period)}
+              >
+                {PERIOD_LABELS[row.period] ?? row.period}
+              </button>
+            ))}
           </div>
-        ))}
+        ) : null}
+        <EChart
+          option={option}
+          className="parker-treemap"
+          ariaLabel={`Komu patří zaparkovaná auta, ${PERIOD_LABELS[period.period]?.toLowerCase() ?? period.period}`}
+        />
+        {/* On phones the small tiles have no room for names, so this table is shown there. */}
         <table className="parker-table">
           <caption className="sr-only">Podíl zaparkovaných aut podle toho, komu patří</caption>
           <thead>
             <tr>
               <th scope="col">Kdo parkuje</th>
-              {parkers.map((period) => (
-                <th key={period.period} scope="col">{PERIOD_LABELS[period.period] ?? period.period}</th>
+              {periods.map((row) => (
+                <th key={row.period} scope="col">{PERIOD_LABELS[row.period] ?? row.period}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {names.map((name) => (
               <tr key={name}>
-                <th scope="row"><i style={{ background: colorOf(name) }} aria-hidden="true" />{name}</th>
-                {parkers.map((period) => (
-                  <td key={period.period}>{formatPercent(shareOf(period, name))}</td>
+                <th scope="row">
+                  <i style={{ background: PARKER_COLORS[names.indexOf(name) % PARKER_COLORS.length] }} aria-hidden="true" />
+                  {name}
+                </th>
+                {periods.map((row) => (
+                  <td key={row.period}>{formatPercent(shareOf(row, name))}</td>
                 ))}
               </tr>
             ))}

@@ -107,3 +107,36 @@ export function yearChangeClause(noun, change) {
 export function shareOf(period, series) {
   return period?.groups.find((group) => group.series === series)?.share ?? null;
 }
+
+// Groups too small to read as a tile in every period are shown together as "Ostatní".
+export function mergeSmallGroups(periods, minShare = 0.03) {
+  const small = new Set(
+    periods[0]?.groups
+      .map((group) => group.series)
+      .filter((name) => periods.every((period) => (shareOf(period, name) ?? 0) < minShare)) ?? [],
+  );
+  if (small.size < 2) {
+    return periods.map((period) => ({
+      ...period,
+      groups: period.groups.map((group) => ({ ...group, parts: [group.series] })),
+    }));
+  }
+  return periods.map((period) => {
+    const kept = period.groups
+      .filter((group) => !small.has(group.series))
+      .map((group) => ({ ...group, parts: [group.series] }));
+    const merged = period.groups.filter((group) => small.has(group.series));
+    return {
+      ...period,
+      groups: [
+        ...kept,
+        {
+          series: "Ostatní",
+          value: merged.reduce((total, group) => total + group.value, 0),
+          share: merged.reduce((total, group) => total + group.share, 0),
+          parts: merged.map((group) => group.series),
+        },
+      ],
+    };
+  });
+}

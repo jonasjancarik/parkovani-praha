@@ -8,6 +8,7 @@ import {
   formatPercentChange,
   formatRatioChange,
   longRunTrend,
+  mergeSmallGroups,
   ratioChangeClause,
   pageFromSearch,
   ratioTrend,
@@ -91,4 +92,20 @@ test("a ratio change reads as a rise, a fall, or no change", () => {
   assert.equal(ratioChangeClause(1.2, 1.424), "vzrostl z 1,20 na 1,42");
   assert.equal(ratioChangeClause(1.5, 1.3), "klesl z 1,50 na 1,30");
   assert.equal(ratioChangeClause(1.35, 1.352), "zůstal na 1,35");
+});
+
+test("groups too small in every period are shown together", () => {
+  const period = (name, shares) => ({
+    period: name,
+    groups: Object.entries(shares).map(([series, share]) => ({ series, share, value: share * 100 })),
+  });
+  const merged = mergeSmallGroups([
+    period("den", { Rezidenti: 0.9, Ostatní: 0.01, Vlastníci: 0.02, Abonenti: 0.07 }),
+    period("noc", { Rezidenti: 0.95, Ostatní: 0.01, Vlastníci: 0.02, Abonenti: 0.02 }),
+  ]);
+  assert.deepEqual(merged[0].groups.map((group) => group.series), ["Rezidenti", "Abonenti", "Ostatní"]);
+  const rest = merged[0].groups.at(-1);
+  assert.deepEqual(rest.parts, ["Ostatní", "Vlastníci"]);
+  assert.equal(Math.round(rest.share * 100), 3);
+  assert.deepEqual(mergeSmallGroups([period("den", { Rezidenti: 0.99, Ostatní: 0.01 })])[0].groups[1].parts, ["Ostatní"]);
 });

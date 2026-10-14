@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts/core";
-import { BarChart, LineChart, ScatterChart } from "echarts/charts";
+import { BarChart, LineChart, ScatterChart, TreemapChart } from "echarts/charts";
 import {
   GridComponent,
   LegendComponent,
@@ -18,6 +18,7 @@ echarts.use([
   LineChart,
   ScatterChart,
   TooltipComponent,
+  TreemapChart,
 ]);
 
 export function EChart({ option, className = "", ariaLabel }) {
