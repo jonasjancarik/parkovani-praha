@@ -246,7 +246,10 @@ function parkerTreemapOption(period, other, colorOf, reduceMotion, compact) {
           `<strong>${data.name}</strong>`,
           `${formatPercent(data.share)} zaparkovaných aut, přibližně ${formatNumber(data.cars)} aut`,
         ];
-        if (data.parts.length > 1) lines.push(`Patří sem: ${data.parts.join(", ")}`);
+        if (data.parts.length > 1) {
+          const parts = data.parts.map((part) => part.toLowerCase());
+          lines.push(`Patří sem ${parts.slice(0, -1).join(", ")} a ${parts.at(-1)}`);
+        }
         const otherShare = other?.groups.find((group) => group.series === data.name)?.share;
         if (otherShare != null) lines.push(`<span style="color:#74716a">${otherLabel}: ${formatPercent(otherShare)}</span>`);
         return lines.join("<br>");
@@ -336,6 +339,7 @@ function ParkerSection({ parkers }) {
           </p>
         ) : null}
         <p>
+          Mezi rezidenty počítáme i ty se sociálním oprávněním, tedy rezidenty se zvýhodněním.
           Podíly vycházejí z měření obsazenosti za {formatMonth(period.date)}. Když na dlaždici
           najedete myší nebo klepnete, uvidíte přibližný počet aut a srovnání s druhou částí dne.
         </p>

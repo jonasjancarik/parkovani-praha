@@ -19,7 +19,7 @@ def overview_sample(months=("2025-03-31", "2026-02-28", "2026-03-31")) -> pd.Dat
             ("B", "P02", 2000, 2000),
             ("C", "P13", 50, 10),
         ]:
-            for cast_dne, residents, visitors in [("den", 60, 40), ("noc", 90, 10)]:
+            for cast_dne, residents, visitors in [("den", 50, 40), ("noc", 80, 10)]:
                 rows.append(
                     {
                         "kod_useku": zone,
@@ -30,6 +30,7 @@ def overview_sample(months=("2025-03-31", "2026-02-28", "2026-03-31")) -> pd.Dat
                         "POP_CELKEM": permits,
                         "parkovacich_mist_v_zps": spaces,
                         "rezidentska": residents,
+                        "socialni": 10,
                         "navstevnici": visitors,
                     }
                 )
@@ -76,6 +77,8 @@ def test_parker_shares_are_reported_for_day_and_night() -> None:
     night = {group["series"]: group["share"] for group in parkers["noc"]["groups"]}
     assert day == {"Rezidenti": pytest.approx(0.6), "Návštěvníci": pytest.approx(0.4)}
     assert night["Rezidenti"] == pytest.approx(0.9)
+    residents = parkers["den"]["groups"][0]
+    assert residents["parts"] == ["rezidenti", "rezidenti se sociálním oprávněním"]
 
 
 def test_overview_carries_the_download_date() -> None:

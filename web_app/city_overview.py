@@ -5,7 +5,7 @@ from datetime import date
 import pandas as pd
 
 try:
-    from .explorer_analytics import PARKER_TYPES, _district_pressure
+    from .explorer_analytics import _district_pressure
     from .explorer_data import (
         ExplorerFilters,
         _filter_rows,
@@ -13,7 +13,7 @@ try:
         build_explorer_payload,
     )
 except ImportError:  # Streamlit runs modules from web_app as top-level imports.
-    from explorer_analytics import PARKER_TYPES, _district_pressure
+    from explorer_analytics import _district_pressure
     from explorer_data import (
         ExplorerFilters,
         _filter_rows,
@@ -26,6 +26,15 @@ except ImportError:  # Streamlit runs modules from web_app as top-level imports.
 # ranking with ratios that say nothing about the district as a whole.
 MIN_RANKED_SPACES = 1000
 PARKER_PERIODS = ("den", "noc")
+# Holders of social permits are residents with a discount, so they count as residents.
+PARKER_GROUPS = {
+    "Rezidenti": ("rezidentska", "socialni"),
+    "Návštěvníci": ("navstevnici",),
+    "Abonenti": ("abonentska",),
+    "Vlastníci": ("vlastnicka",),
+    "Ostatní": ("ostatni",),
+}
+PARKER_PARTS = {"Rezidenti": ["rezidenti", "rezidenti se sociálním oprávněním"]}
 
 
 def _same_month_a_year_earlier(dates: pd.Series, latest: pd.Timestamp) -> pd.Timestamp | None:
@@ -101,10 +110,14 @@ def _districts(base: pd.DataFrame) -> list[dict]:
 
 def _parkers(scoped: pd.DataFrame) -> list[dict]:
     """Who is parked in the zones by day and by night in the latest measured month."""
-    columns = [column for column in PARKER_TYPES.values() if column in scoped.columns]
+    groups = {
+        label: [column for column in columns if column in scoped.columns]
+        for label, columns in PARKER_GROUPS.items()
+    }
+    groups = {label: columns for label, columns in groups.items() if columns}
+    columns = [column for group in groups.values() for column in group]
     if scoped.empty or not columns:
         return []
-    label_by_column = {column: label for label, column in PARKER_TYPES.items()}
     periods = []
     for period in PARKER_PERIODS:
         rows = scoped[scoped["cast_dne"] == period]
@@ -112,7 +125,8 @@ def _parkers(scoped: pd.DataFrame) -> list[dict]:
         if rows.empty:
             continue
         month = rows[rows["date"] == rows["date"].max()]
-        totals = month.groupby("kod_useku")[columns].mean().sum()
+        per_column = month.groupby("kod_useku")[columns].mean().sum()
+        totals = pd.Series({label: per_column[group].sum() for label, group in groups.items()})
         total = float(totals.sum())
         if total <= 0:
             continue
@@ -122,11 +136,12 @@ def _parkers(scoped: pd.DataFrame) -> list[dict]:
                 "date": month["date"].max().date().isoformat(),
                 "groups": [
                     {
-                        "series": label_by_column[column],
+                        "series": label,
                         "value": round(float(value)),
                         "share": float(value) / total,
+                        "parts": PARKER_PARTS.get(label, [label]),
                     }
-                    for column, value in totals.sort_values(ascending=False).items()
+                    for label, value in totals.sort_values(ascending=False).items()
                 ],
             }
         )

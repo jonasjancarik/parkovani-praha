@@ -118,13 +118,13 @@ export function mergeSmallGroups(periods, minShare = 0.03) {
   if (small.size < 2) {
     return periods.map((period) => ({
       ...period,
-      groups: period.groups.map((group) => ({ ...group, parts: [group.series] })),
+      groups: period.groups.map((group) => ({ ...group, parts: group.parts ?? [group.series] })),
     }));
   }
   return periods.map((period) => {
     const kept = period.groups
       .filter((group) => !small.has(group.series))
-      .map((group) => ({ ...group, parts: [group.series] }));
+      .map((group) => ({ ...group, parts: group.parts ?? [group.series] }));
     const merged = period.groups.filter((group) => small.has(group.series));
     return {
       ...period,
@@ -134,7 +134,7 @@ export function mergeSmallGroups(periods, minShare = 0.03) {
           series: "Ostatní",
           value: merged.reduce((total, group) => total + group.value, 0),
           share: merged.reduce((total, group) => total + group.share, 0),
-          parts: merged.map((group) => group.series),
+          parts: merged.flatMap((group) => group.parts ?? [group.series]),
         },
       ],
     };
