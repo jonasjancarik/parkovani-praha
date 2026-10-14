@@ -29,6 +29,37 @@ export function ratioTrend(change) {
   return change > 0 ? "up" : "down";
 }
 
+function monthNumber(date) {
+  const [year, month] = date.slice(0, 7).split("-").map(Number);
+  return year * 12 + month;
+}
+
+// Direction of permits per space over the whole series and over its last year:
+// "up" or "down" only when both agree, so a heading never claims a lasting trend
+// that the latest year contradicts.
+export function longRunTrend(series) {
+  const rows = series.filter((row) => Number.isFinite(row.permits_per_space));
+  if (rows.length < 2) return null;
+  const first = rows[0];
+  const last = rows.at(-1);
+  const yearAgo = rows.find((row) => monthNumber(row.date) === monthNumber(last.date) - 12);
+  const whole = ratioTrend(last.permits_per_space - first.permits_per_space);
+  const recent = yearAgo ? ratioTrend(last.permits_per_space - yearAgo.permits_per_space) : whole;
+  return whole === recent ? whole : "mixed";
+}
+
+// "vzrostl z 1,20 na 1,42"
+export function ratioChangeClause(from, to) {
+  const trend = ratioTrend(to - from);
+  if (trend === "flat") return `zůstal na ${ratioText(to)}`;
+  return `${trend === "up" ? "vzrostl" : "klesl"} z ${ratioText(from)} na ${ratioText(to)}`;
+}
+
+const ratioNumber = new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function ratioText(value) {
+  return ratioNumber.format(value);
+}
+
 // The districts where permits per space rose and fell the most over the year.
 export function biggestChanges(districts) {
   const known = districts.filter((row) => row.ratio_change != null);

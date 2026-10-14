@@ -22,7 +22,8 @@ import {
   explorerHref,
   formatPercentChange,
   formatRatioChange,
-  ratioTrend,
+  longRunTrend,
+  ratioChangeClause,
   shareOf,
   yearChangeClause,
 } from "./overviewState.js";
@@ -32,9 +33,9 @@ const SLATE = "#667386";
 const PARKER_COLORS = ["#114f50", "#9a684f", "#8a866c", "#b48b87", "#5d8a8b", "#c2a878"];
 const PERIOD_LABELS = { den: "Ve dne", noc: "V noci" };
 const TREND_HEADINGS = {
-  up: "Na jedno místo připadá víc oprávnění než před rokem",
-  down: "Na jedno místo připadá méně oprávnění než před rokem",
-  flat: "Na jedno místo připadá stejně oprávnění jako před rokem",
+  up: "Na jedno místo připadá čím dál víc oprávnění",
+  down: "Na jedno místo připadá čím dál méně oprávnění",
+  flat: "Na jedno místo připadá zhruba stejně oprávnění jako dřív",
 };
 
 function ratioChartOption(series, compact, reduceMotion) {
@@ -126,22 +127,25 @@ function TrendSection({ overview }) {
   );
   const { city, trend: { series, zones, spaces, share_of_spaces: share } } = overview;
   const since = formatMonthGenitive(series[0].date);
-  const trend = ratioTrend(city.ratio_change);
+  const trend = longRunTrend(series);
+  const first = series[0].permits_per_space;
+  const last = series.at(-1).permits_per_space;
   return (
     <section className="overview-section" aria-labelledby="trend-heading">
       <div className="overview-text">
         <h2 id="trend-heading">{TREND_HEADINGS[trend] ?? "Kolik oprávnění připadá na jedno místo"}</h2>
-        {city.compared_with ? (
-          <p>
-            Za rok {yearChangeClause("oprávnění", city.permits_change)},{" "}
-            {yearChangeClause("parkovacích míst", city.spaces_change)}.
-          </p>
-        ) : null}
         <p>
-          Graf sleduje jen úseky, které mají data v každém měsíci od {since}, aby vývoj
-          nezkreslovalo rozšiřování zón. Je jich {formatNumber(zones)} a mají {formatNumber(spaces)} míst
-          {share != null ? `, tedy ${formatPercent(share)} dnešní kapacity` : ""}. Proto graf končí
-          na {formatRatio(series.at(-1).permits_per_space)}, zatímco za celou Prahu je to {formatRatio(city.permits_per_space)}.
+          V úsecích, které existují od {since}, počet oprávnění na jedno místo
+          {" "}{ratioChangeClause(first, last)}.
+          {city.compared_with
+            ? ` Za celou Prahu za poslední rok ${yearChangeClause("oprávnění", city.permits_change)}, ${yearChangeClause("parkovacích míst", city.spaces_change)}.`
+            : ""}
+        </p>
+        <p>
+          Graf sleduje jen úseky s daty v každém měsíci, aby vývoj nezkreslovalo rozšiřování
+          zón. Je jich {formatNumber(zones)} a mají {formatNumber(spaces)} míst
+          {share != null ? `, tedy ${formatPercent(share)} dnešní kapacity` : ""}. Proto končí
+          na {formatRatio(last)}, zatímco za celou Prahu je to {formatRatio(city.permits_per_space)}.
         </p>
         <p>Čára se přerušuje v měsících, pro které data chybí.</p>
         <a

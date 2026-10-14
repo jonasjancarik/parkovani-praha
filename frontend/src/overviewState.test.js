@@ -7,6 +7,8 @@ import {
   explorerHref,
   formatPercentChange,
   formatRatioChange,
+  longRunTrend,
+  ratioChangeClause,
   pageFromSearch,
   ratioTrend,
   shareOf,
@@ -74,4 +76,19 @@ test("a yearly change reads as a rise, a fall, or no change", () => {
   assert.equal(yearChangeClause("oprávnění", 0.0359).replace(/\s/g, " "), "oprávnění přibylo o 3,6 %");
   assert.equal(yearChangeClause("parkovacích míst", -0.0023).replace(/\s/g, " "), "parkovacích míst ubylo o 0,2 %");
   assert.equal(yearChangeClause("parkovacích míst", 0.0001), "parkovacích míst zůstalo stejně");
+});
+
+test("a lasting trend needs the whole series and its last year to agree", () => {
+  const rows = (values) => values.map(([date, permits_per_space]) => ({ date, permits_per_space }));
+  assert.equal(longRunTrend(rows([["2019-03-31", 1.2], ["2025-08-31", 1.36], ["2026-08-31", 1.42]])), "up");
+  assert.equal(longRunTrend(rows([["2019-03-31", 1.2], ["2025-08-31", 1.45], ["2026-08-31", 1.42]])), "mixed");
+  assert.equal(longRunTrend(rows([["2019-03-31", 1.5], ["2025-08-31", 1.4], ["2026-08-31", 1.3]])), "down");
+  assert.equal(longRunTrend(rows([["2019-03-31", 1.2], ["2026-08-31", 1.42]])), "up");
+  assert.equal(longRunTrend(rows([["2026-08-31", 1.42]])), null);
+});
+
+test("a ratio change reads as a rise, a fall, or no change", () => {
+  assert.equal(ratioChangeClause(1.2, 1.424), "vzrostl z 1,20 na 1,42");
+  assert.equal(ratioChangeClause(1.5, 1.3), "klesl z 1,50 na 1,30");
+  assert.equal(ratioChangeClause(1.35, 1.352), "zůstal na 1,35");
 });
