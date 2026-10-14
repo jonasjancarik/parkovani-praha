@@ -356,19 +356,22 @@ function ParkerSection({ parkers }) {
             ))}
           </div>
         ) : null}
+        <div className="parker-body">
         <EChart
           option={option}
           className="parker-treemap"
           ariaLabel={`Komu patří zaparkovaná auta, ${PERIOD_LABELS[period.period]?.toLowerCase() ?? period.period}`}
         />
-        {/* On phones the small tiles have no room for names, so this table is shown there. */}
+        {/* Small tiles have no room for their names, so the table doubles as the legend. */}
         <table className="parker-table">
           <caption className="sr-only">Podíl zaparkovaných aut podle toho, komu patří</caption>
           <thead>
             <tr>
               <th scope="col">Kdo parkuje</th>
               {periods.map((row) => (
-                <th key={row.period} scope="col">{PERIOD_LABELS[row.period] ?? row.period}</th>
+                <th key={row.period} scope="col" className={row.period === period.period ? "is-selected" : ""}>
+                  {PERIOD_LABELS[row.period] ?? row.period}
+                </th>
               ))}
             </tr>
           </thead>
@@ -380,12 +383,15 @@ function ParkerSection({ parkers }) {
                   {name}
                 </th>
                 {periods.map((row) => (
-                  <td key={row.period}>{formatPercent(shareOf(row, name))}</td>
+                  <td key={row.period} className={row.period === period.period ? "is-selected" : ""}>
+                    {formatPercent(shareOf(row, name))}
+                  </td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </section>
   );
