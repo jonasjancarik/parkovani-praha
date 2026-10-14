@@ -242,6 +242,8 @@ function parkerTreemapOption(period, other, colorOf, reduceMotion, compact) {
       borderColor: "#d9d4ca",
       textStyle: { color: "#26251f", fontFamily: "Inter, sans-serif", fontSize: 13 },
       formatter: ({ data }) => {
+        // The treemap's root, hovered between the tiles, is not a group.
+        if (!data?.parts) return "";
         const lines = [
           `<strong>${data.name}</strong>`,
           `${formatPercent(data.share)} zaparkovaných aut, přibližně ${formatNumber(data.cars)} aut`,
@@ -340,6 +342,7 @@ function ParkerSection({ parkers }) {
         ) : null}
         <p>
           Mezi rezidenty počítáme i ty se sociálním oprávněním, tedy rezidenty se zvýhodněním.
+          Podnikatelé jsou v datech TSK vedeni jako abonenti.
           Podíly vycházejí z měření obsazenosti za {formatMonth(period.date)}. Když na dlaždici
           najedete myší nebo klepnete, uvidíte přibližný počet aut a srovnání s druhou částí dne.
         </p>
