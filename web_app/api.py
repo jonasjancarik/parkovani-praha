@@ -76,8 +76,9 @@ def explorer(
     cast_dne: list[str] | None = Query(default=None),
     district: list[str] | None = Query(default=None),
     zone_type: list[str] | None = Query(default=None),
+    same_zones: bool = False,
 ) -> dict:
-    filters = make_filters(start, end, cast_dne, district, zone_type)
+    filters = make_filters(start, end, cast_dne, district, zone_type, same_zones)
     return explorer_payload(filters)
 
 

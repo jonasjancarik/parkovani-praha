@@ -19,6 +19,7 @@ import {
   DateRange,
   DistrictSelect,
   MultiSelect,
+  SameZonesToggle,
   ToolbarActions,
 } from "./ExplorerControls.jsx";
 import {
@@ -493,6 +494,7 @@ function InsightPanel({ payload, filters }) {
         <p>{districtText}</p>
         <p>{filters.castDne.map((value) => TIME_LABELS[value] ?? value).join(", ") || "všechny části dne"}</p>
         <p>Typy zón: {filters.zoneTypes.map((value) => ZONE_LABELS[value] ?? value).join(", ") || "všechny"}</p>
+        {filters.sameZones ? <p>Jen úseky, které existují po celé vybrané období</p> : null}
         <p className="selection-date">
           {isoToCzech(filters.start)} – {isoToCzech(filters.end)}
         </p>
@@ -520,6 +522,12 @@ function InsightPanel({ payload, filters }) {
               zatímco kapacita parkovacích míst o {pct(summary.spaces_change)}. Na jedno
               dostupné místo nyní připadá v průměru {formatRatio(summary.permits_per_space)} oprávnění.
             </p>
+            {filters.sameZones ? (
+              <p>
+                Úseky, které v některém měsíci vybraného období chybí, nejsou započtené.
+                Změny proto nevznikají tím, že se zóny rozšiřovaly.
+              </p>
+            ) : null}
             <p>
               Do počtů se nezapočítávají oprávnění budov dál než 500 m od nejbližšího úseku zóny (asi 2 %) a souhrnné záznamy bez konkrétního místa, zejména ekologická oprávnění vedená na jedné adrese. Součty jsou proto nižší než ve zdrojových datech TSK.
             </p>
@@ -567,6 +575,7 @@ export function App() {
     || filters.districts.length > 0
     || !sameSelection(filters.castDne, defaultFilters.castDne)
     || !sameSelection(filters.zoneTypes, defaultFilters.zoneTypes)
+    || filters.sameZones
   );
 
   useEffect(() => {
@@ -685,6 +694,7 @@ export function App() {
               <MultiSelect label="Část dne (parkování)" values={payload.options.cast_dne} selected={filters.castDne} onChange={(values) => setFilter("castDne", values)} display={(value) => TIME_LABELS[value] ?? value} />
               <DistrictSelect values={payload.options.districts} selected={filters.districts} onChange={(values) => setFilter("districts", values)} />
               <MultiSelect label="Typ zóny" values={payload.options.zone_types} selected={filters.zoneTypes} onChange={(values) => setFilter("zoneTypes", values)} display={(value) => ZONE_LABELS[value] ?? value} />
+              <SameZonesToggle checked={filters.sameZones} onChange={(value) => setFilter("sameZones", value)} />
             </section>
             <div className="toolbar-utility">
               <ToolbarActions

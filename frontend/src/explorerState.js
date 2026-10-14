@@ -4,6 +4,7 @@ export const DEFAULT_FILTERS = {
   castDne: ["Po-Pá", "Po-Pá (MPD)", "So-Ne", "noc"],
   districts: [],
   zoneTypes: ["MIX", "OST", "RES", "VIS"],
+  sameZones: false,
 };
 
 const VALID_VIEWS = new Set(["charts", "table"]);
@@ -22,6 +23,7 @@ export function initialStateFromSearch(search) {
       castDne: params.has("cast_dne") ? params.getAll("cast_dne") : DEFAULT_FILTERS.castDne,
       districts: params.getAll("district"),
       zoneTypes: params.has("zone_type") ? params.getAll("zone_type") : DEFAULT_FILTERS.zoneTypes,
+      sameZones: params.get("same_zones") === "true",
     },
   };
 }
@@ -33,6 +35,7 @@ export function queryFor(filters) {
   filters.castDne.forEach((value) => params.append("cast_dne", value));
   filters.districts.forEach((value) => params.append("district", value));
   filters.zoneTypes.forEach((value) => params.append("zone_type", value));
+  if (filters.sameZones) params.set("same_zones", "true");
   return params.toString();
 }
 
@@ -60,6 +63,7 @@ export function stateToSearch(filters, view, metric) {
   if (!sameSelection(filters.zoneTypes, DEFAULT_FILTERS.zoneTypes)) {
     filters.zoneTypes.forEach((value) => params.append("zone_type", value));
   }
+  if (filters.sameZones) params.set("same_zones", "true");
   if (view !== "charts") params.set("view", view);
   if (metric !== "permits-spaces") params.set("metric", metric);
   return params.toString();

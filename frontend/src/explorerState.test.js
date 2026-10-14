@@ -18,6 +18,7 @@ test("shareable state round-trips filters, view, and metric", () => {
     castDne: ["noc"],
     districts: ["P07"],
     zoneTypes: ["RES", "MIX"],
+    sameZones: true,
   };
 
   const search = stateToSearch(filters, "table", "pressure");

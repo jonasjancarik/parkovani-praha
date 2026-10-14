@@ -24,6 +24,9 @@ class ExplorerFilters:
     cast_dne: tuple[str, ...] = ()
     districts: tuple[str, ...] = ()
     zone_types: tuple[str, ...] = DEFAULT_ZONE_TYPES
+    # Keep only zones with parking spaces in every month of the period, so that
+    # newly added or removed zones do not show up as changes over time.
+    same_zones: bool = False
 
 
 def _string_values(values: Iterable[str] | None) -> tuple[str, ...]:
@@ -51,13 +54,28 @@ def _filter_rows(
         mask &= df["date"] >= pd.Timestamp(filters.start)
     if filters.end:
         mask &= df["date"] <= pd.Timestamp(filters.end)
-    if apply_cast_dne and filters.cast_dne:
-        mask &= df["cast_dne"].isin(filters.cast_dne)
     if filters.districts:
         mask &= df["mestska_cast"].isin(filters.districts)
     if filters.zone_types:
         mask &= df["typ_zony"].isin(filters.zone_types)
+    if filters.same_zones:
+        mask &= df["kod_useku"].isin(zones_present_throughout(df.loc[mask]))
+    if apply_cast_dne and filters.cast_dne:
+        mask &= df["cast_dne"].isin(filters.cast_dne)
     return df.loc[mask]
+
+
+def zones_present_throughout(scoped: pd.DataFrame) -> set:
+    """Zones with parking spaces in every month for which the scope has any data.
+
+    Months missing from the whole source stay gaps and do not exclude anyone.
+    """
+    present = scoped.loc[scoped["parkovacich_mist_v_zps"] > 0, ["kod_useku", "date"]]
+    if present.empty:
+        return set()
+    months = present["date"].nunique()
+    per_zone = present.drop_duplicates().groupby("kod_useku")["date"].nunique()
+    return set(per_zone[per_zone == months].index)
 
 
 def canonical_zone_month_rows(scoped: pd.DataFrame) -> pd.DataFrame:
@@ -223,6 +241,7 @@ def filters_to_dict(filters: ExplorerFilters, options: dict) -> dict:
         "cast_dne": list(filters.cast_dne),
         "districts": list(filters.districts),
         "zone_types": list(filters.zone_types),
+        "same_zones": filters.same_zones,
     }
 
 
@@ -232,6 +251,7 @@ def make_filters(
     cast_dne: list[str] | None,
     districts: list[str] | None,
     zone_types: list[str] | None,
+    same_zones: bool = False,
 ) -> ExplorerFilters:
     return ExplorerFilters(
         start=start,
@@ -239,4 +259,5 @@ def make_filters(
         cast_dne=_string_values(cast_dne),
         districts=_string_values(districts),
         zone_types=_string_values(zone_types) or DEFAULT_ZONE_TYPES,
+        same_zones=same_zones,
     )

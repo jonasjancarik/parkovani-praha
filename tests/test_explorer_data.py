@@ -140,3 +140,27 @@ def test_capacity_only_period_returns_partial_payload() -> None:
         "permits_start": None,
         "permits_end": None,
     }
+
+
+def test_same_zones_leave_out_zones_added_during_the_period() -> None:
+    payload = build_explorer_payload(
+        sample_data(),
+        ExplorerFilters(zone_types=("RES", "MIX"), same_zones=True),
+    )
+
+    assert [row["spaces"] for row in payload["series"]] == [100, 100]
+    assert [row["permits"] for row in payload["series"]] == [120, 130]
+    assert payload["filters"]["same_zones"] is True
+
+
+def test_same_zones_follow_the_selected_period() -> None:
+    payload = build_explorer_payload(
+        sample_data(),
+        ExplorerFilters(
+            start=date(2025, 2, 1),
+            zone_types=("RES", "MIX"),
+            same_zones=True,
+        ),
+    )
+
+    assert payload["series"][-1]["spaces"] == 200

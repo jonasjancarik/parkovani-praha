@@ -146,3 +146,20 @@ export function ToolbarActions({ loading, hasActiveFilters, shareStatus, onShare
     </div>
   );
 }
+
+export function SameZonesToggle({ checked, onChange }) {
+  return (
+    <div className="filter-control">
+      <span className="filter-label" id="same-zones-label">Rozšiřování zón</span>
+      <label className="same-zones-toggle">
+        <input
+          type="checkbox"
+          checked={checked}
+          aria-describedby="same-zones-label"
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        Jen úseky, které existují celé období
+      </label>
+    </div>
+  );
+}
