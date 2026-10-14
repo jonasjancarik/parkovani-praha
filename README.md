@@ -91,7 +91,7 @@ remains a visual overlay and never replaces API values or CSV exports.
 
 ### City overview
 
-`Městský přehled` is the page the app opens with (`/`). It needs no filtering: it
+The city overview is the homepage (`/`), opened through the site name; it has no item of its own in the navigation. It needs no filtering: it
 shows the latest citywide number of permits, parking spaces and permits per space
 with the change against the same month a year earlier, the development of permits
 per space, every district ranked by that ratio, who is parked in the zones by day
@@ -104,7 +104,7 @@ filter is changed. Districts with fewer than 1,000 paid-parking spaces are left
 out of the ranking. A yearly change is reported only when the same month of the
 previous year has data.
 
-The explorer now lives at `/?page=explorer`. Explorer links shared earlier, which
+The explorer, called `Vývoj a srovnání` in the navigation, now lives at `/?page=explorer`. Explorer links shared earlier, which
 carry filters but no page name, still open the explorer.
 
 ### Address report

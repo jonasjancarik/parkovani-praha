@@ -9,8 +9,8 @@ When implementing from a selected generated mock, treat that image as the source
 ## Parkování Praha direction
 
 - `../docs/design/data-explorer-target.png` set the visual language (type, paper, colours, rules). The layout has since moved away from it on purpose; the decisions below win where they differ from the image.
-- The main analytical surface is the chart-first `Datový průzkumník` with `Grafy` and `Tabulka` as peer views. `Mapa` stays hidden until there is a real map; do not bring back a placeholder tab.
-- `Městský přehled` (`src/OverviewPage.jsx`) is the homepage: a few ready answers about the whole city with no filters, each leading into the explorer or `Okolí adresy`. Keep it short and keep its sentences generated from the data. Do not fold it into the explorer screen, and do not move explorer-only analyses (forecast, ZSJ, yearly change distribution) onto it.
+- The main analytical surface is the chart-first explorer, named `Vývoj a srovnání` in the navigation, with `Grafy` and `Tabulka` as peer views. `Mapa` stays hidden until there is a real map; do not bring back a placeholder tab.
+- The city overview (`src/OverviewPage.jsx`) is the homepage, reached through the site name rather than its own navigation item: a few ready answers about the whole city with no filters, each leading into the explorer or `Okolí adresy`. Keep it short and keep its sentences generated from the data. Do not fold it into the explorer screen, and do not move explorer-only analyses (forecast, ZSJ, yearly change distribution) onto it.
 - Preserve the editorial serif/sans pairing, warm paper background, Prague red, deep teal, thin rules, direct chart labels, and low-card visual hierarchy.
 
 ### Decisions approved by Jonáš on 2026-10-13

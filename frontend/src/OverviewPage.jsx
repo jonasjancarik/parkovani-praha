@@ -372,7 +372,7 @@ export function OverviewPage() {
   const ready = Boolean(overview?.city);
 
   useEffect(() => {
-    document.title = "Parkování Praha – městský přehled";
+    document.title = "Parkování Praha";
   }, []);
 
   return (

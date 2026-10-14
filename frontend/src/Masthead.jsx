@@ -3,15 +3,14 @@ import { IconCalendar } from "@tabler/icons-react";
 import { isoToCzech } from "./format.js";
 
 const PAGES = [
-  { id: "overview", label: "Městský přehled", href: "./" },
-  { id: "explorer", label: "Datový průzkumník", href: "./?page=explorer" },
+  { id: "explorer", label: "Vývoj a srovnání", href: "./?page=explorer" },
   { id: "address", label: "Okolí adresy", href: "./?page=address" },
 ];
 
 export function Masthead({ page, dataDate }) {
   return (
     <header className="masthead">
-      <a className="brand" href="./">Parkování Praha</a>
+      <a className="brand" href="./" aria-current={page === "overview" ? "page" : undefined}>Parkování Praha</a>
       <nav aria-label="Hlavní navigace">
         {PAGES.map((item) => (
           <a

@@ -579,7 +579,7 @@ export function App() {
   );
 
   useEffect(() => {
-    document.title = "Datový průzkumník – Parkování Praha";
+    document.title = "Vývoj a srovnání – Parkování Praha";
   }, []);
 
   useEffect(() => {
@@ -649,7 +649,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#explorer">Přejít k datovému průzkumníku</a>
+      <a className="skip-link" href="#explorer">Přejít k vývoji a srovnání</a>
       <Masthead page="explorer" dataDate={payload?.options.max_date} />
 
       <main id="explorer">
@@ -682,7 +682,7 @@ export function App() {
               <span>{hasActiveFilters ? "Upravený výběr" : "Výchozí výběr"}</span>
               <IconChevronDown size={16} stroke={1.7} aria-hidden="true" />
             </button>
-            <section id="explorer-filters" className={`filter-bar${filtersOpen ? " is-open" : ""}`} aria-label="Filtry průzkumníku">
+            <section id="explorer-filters" className={`filter-bar${filtersOpen ? " is-open" : ""}`} aria-label="Filtry">
               <DateRange
                 start={effectiveFilters.start}
                 end={effectiveFilters.end}
