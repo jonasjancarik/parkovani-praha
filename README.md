@@ -91,6 +91,13 @@ remains a visual overlay and never replaces API values or CSV exports.
 
 ### Production container
 
+Security builds require certifi 2026.10.19 or later, Pillow 13 or later, and
+uv 0.13.4. Streamlit is updated as needed to support Pillow 13. The image refreshes
+Debian's CA bundle, explicitly disables emSign ECC Root CA - G3, and installs
+pip 26.2.2 to refresh its separate vendored trust store. Build with `--pull` when
+refreshing base images; verify the actual Python, certifi, pip and system trust
+stores in the replacement container before accepting the release.
+
 The production image builds the React frontend and serves it together with the
 FastAPI endpoints from one process:
 
