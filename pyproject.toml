@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "certifi>=2026.10.19",
+    "pillow>=13.0.0",
     "folium>=0.20.0",
     "geopandas>=1.1.2",
     "numpy>=2.2.6",
