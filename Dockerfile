@@ -28,8 +28,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-install-project
+RUN uv sync --locked --no-dev --no-install-project
 
 COPY web_app/ ./web_app/
 COPY src/ ./src/
